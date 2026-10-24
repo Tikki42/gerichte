@@ -27,7 +27,7 @@ export const OTHER_FILTERS = [
   ['quick', 'Blitzgericht'],
   ['mealPrep', 'Vorkochen'],
   ['meatOptional', 'Fleisch ergänzbar'],
-  ['cold', 'Schmeckt kalt'],
+  ['cold', 'Kaltes Gericht'],
 ];
 
 export function resetFilters() {

@@ -9,14 +9,13 @@ export const DEFAULT_METHODS = [
   { id: 'ofen', name: 'Ofen', icon: '🔥' },
   { id: 'heissluft', name: 'Heißluftfritteuse', icon: '💨' },
   { id: 'mikrowelle', name: 'Mikrowelle', icon: '⚡' },
-  { id: 'grill', name: 'Grill', icon: '🍖' },
   { id: 'ohne', name: 'ohne Kochen', icon: '🥗' },
 ];
 
 export const EFFORT = {
   1: 'Kaufen & aufwärmen',
-  2: 'Mit Fertigprodukten',
-  3: 'Komplett selbst gemacht',
+  2: 'Mittlerer Aufwand',
+  3: 'Größerer eigener Aufwand',
 };
 
 export const DIETS = [
@@ -58,6 +57,21 @@ export async function load() {
     await db.write(['methods'], s => defaults.forEach(m => s.methods.put(m)));
     state.methods = new Map(defaults.map(m => [m.id, m]));
   }
+  await removeGrillOnce();
+}
+
+// Einmalig (Version 1.4.0): Zubereitungsart "Grill" aus dem Bestand entfernen – nur wenn kein Gericht sie nutzt.
+// Auf dem Hauptgerät zählt das als Änderung, damit der nächste Export sie auch beim Lesegerät entfernt.
+async function removeGrillOnce() {
+  if (state.meta.grillRemoved) return;
+  const remove = state.methods.has('grill') && ![...state.dishes.values()].some(d => d.methodIds.includes('grill'));
+  const patch = { grillRemoved: true, ...(remove && isMain() ? changeMeta(true) : {}) };
+  await db.write(['methods', 'meta'], s => {
+    if (remove) s.methods.delete('grill');
+    putMeta(s.meta, patch);
+  });
+  if (remove) state.methods.delete('grill');
+  Object.assign(state.meta, patch);
 }
 
 const blobUrl = rec => URL.createObjectURL(new Blob([rec.data], { type: rec.type || 'image/jpeg' }));
@@ -167,7 +181,7 @@ export function blankDish() {
     diet: null,
     quick: false,        // Blitzgericht
     mealPrep: false,     // fürs Vorkochen geeignet
-    cold: false,         // kaltes Gericht / schmeckt kalt
+    cold: false,         // kaltes Gericht
     meatOptional: false, // Fleisch kann extra ergänzt werden
     favorite: false,
     tags: [],

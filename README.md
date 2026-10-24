@@ -90,12 +90,12 @@ Gerichte mit gleichem Namen oder gleicher ID wie ein vorhandenes werden überspr
 |---|---|---|
 | `name` | Text (Pflicht) | – |
 | `ingredients` | Liste von Zutatennamen | `[]` |
-| `methods` | `Herd`, `Ofen`, `Heißluftfritteuse`, `Mikrowelle`, `Grill`, `ohne Kochen` (oder neue) | `[]` |
-| `effort` | `1` kaufen + aufwärmen, `2` mit Fertigprodukten, `3` komplett selbst gemacht | leer |
+| `methods` | `Herd`, `Ofen`, `Heißluftfritteuse`, `Mikrowelle`, `ohne Kochen` (oder neue) | `[]` |
+| `effort` | `1` Kaufen & aufwärmen, `2` Mittlerer Aufwand, `3` Größerer eigener Aufwand | leer |
 | `diet` | `vegan` oder `vegetarisch` (ältere Angaben `fleisch`/`fisch` werden zu „leer“) | leer |
 | `quick` | Blitzgericht | `false` |
 | `mealPrep` | fürs Vorkochen geeignet | `false` |
-| `cold` | kaltes Gericht / schmeckt kalt | `false` |
+| `cold` | kaltes Gericht | `false` |
 | `meatOptional` | Fleisch kann extra ergänzt werden | `false` |
 | `favorite`, `tags`, `note`, `link` | Favorit, freie Tags, Notiz, Link zum Originalrezept | leer |
 | `id` | optional; fehlt sie, wird eine UUID erzeugt | – |
@@ -122,7 +122,7 @@ Transaktion – bei einem Fehler bleibt der alte Stand erhalten.
 4. Nach ca. 1–2 Minuten ist die neue Version online. Beim nächsten Öffnen der App erscheint oben
    „Neue Version verfügbar“ → „Neu laden“. Die Daten bleiben dabei erhalten.
 
-Nicht hochladen: den Ordner `.claude/` (nur für lokale Tests).
+Nicht hochladen: den Ordner `.claude/` (nur für lokale Tests) und den Ordner `vorlagen/` (Excel-Vorlage zum Erfassen der Gerichte; Claude wandelt sie in eine Datei für „Gerichte hinzufügen“ um).
 
 ## App-Icon ändern
 
