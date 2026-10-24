@@ -3,7 +3,8 @@
 import { state, load, isMain, setMeta, ingName, methodList, ingredientUsage, markCooked, photoUrl, DIETS, DIET_LABEL, EFFORT } from './store.js';
 import { filters, resetFilters, activeFilterCount, query, pickRandom, SORTS, TIME_STEPS } from './search.js';
 import { esc, $, fmtShort, relDays, lsGet, lsSet, isStandalone, fold, plural } from './util.js';
-import { openSheet, toast, showError, emitChange } from './ui.js';
+import { openSheet, toast, showError, emitChange, fixBottomGap } from './ui.js';
+import { icon } from './icons.js';
 import { initServiceWorker } from './pwa.js';
 import { openDetail } from './detail.js';
 import { openEdit } from './edit.js';
@@ -24,6 +25,7 @@ async function boot() {
     app.innerHTML = `<div class="boot">Die Daten konnten nicht geladen werden.<br><br>${esc(e.message)}</div>`;
     return;
   }
+  fixBottomGap();
   initServiceWorker();
   requestPersistentStorage();
   document.addEventListener('data-changed', () => { if ($('#list')) renderAll(); });
@@ -72,22 +74,25 @@ function renderShell() {
       <div class="title-row">
         <h1>Gerichte</h1>
         <span id="standSlot"></span>
-        <button class="icon-btn" id="btnSettings" aria-label="Einstellungen">⚙︎</button>
       </div>
-      <div class="search">
-        <span aria-hidden="true">🔍</span>
-        <input id="q" type="search" placeholder="Name, Zutat, Tag, Notiz …" autocomplete="off" autocorrect="off" spellcheck="false" enterkeyhint="search">
-        <button class="icon-btn" id="qClear" aria-label="Suche löschen" hidden>✕</button>
-      </div>
+      <form class="search" role="search" autocomplete="off" onsubmit="return false">
+        ${icon.search(18)}
+        <!-- Platzhalter ohne das Wort "Name", sonst bietet iOS das Ausfüllen von Kontaktdaten an -->
+        <input id="q" type="search" name="gerichtsuche" placeholder="Gericht, Zutat, Tag, Notiz …"
+          autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" enterkeyhint="search">
+        <button type="button" class="clear" id="qClear" aria-label="Suche löschen" hidden>${icon.close(16)}</button>
+      </form>
     </header>
     <div class="filterbar" id="filterbar"></div>
     <div class="active-row" id="activeRow" hidden></div>
     <button class="notice" id="notice" hidden></button>
     <div class="result-row"><span id="count"></span><button class="link-btn" id="btnSort"></button></div>
     <main class="list" id="list"></main>
+    <div class="bottom-fade"></div>
     <div class="bottombar">
-      <button class="btn primary big grow" id="btnRandom">🎲 Was essen wir heute?</button>
-      <button class="btn big square" id="btnAdd" aria-label="Neues Gericht">+</button>
+      <button class="round-btn glass" id="btnSettings" aria-label="Einstellungen">${icon.gear(26)}</button>
+      <button class="btn primary big grow" id="btnRandom">${icon.dice(22)} Was essen wir heute?</button>
+      <button class="round-btn glass" id="btnAdd" aria-label="Neues Gericht">${icon.plus(26)}</button>
     </div>`;
 
   const q = $('#q');
@@ -131,7 +136,7 @@ function renderTop() {
   const m = state.meta;
   $('#btnAdd').hidden = !main;
   $('#standSlot').innerHTML = main ? '' :
-    `<button class="stand-btn" id="btnStand">${m.lastImport ? `Stand: ${fmtShort(m.dataStand)}` : 'Keine Daten'} ⟳</button>`;
+    `<button class="stand-btn glass" id="btnStand">${m.lastImport ? `Stand ${fmtShort(m.dataStand)}` : 'Keine Daten'} ${icon.again(15)}</button>`;
   $('#btnStand')?.addEventListener('click', () => openImport('replace'));
   const changes = m.changesSinceExport || 0;
   $('#btnSettings').classList.toggle('badge-dot', main && changes > 0);
@@ -139,7 +144,7 @@ function renderTop() {
   const notice = $('#notice');
   let html = '';
   if (main && changes > 0) {
-    html = `⚠︎ <span><b>${plural(changes, 'Änderung', 'Änderungen')}</b> seit dem letzten Export – jetzt sichern ›</span>`;
+    html = `<span><b>${plural(changes, 'Änderung', 'Änderungen')}</b> seit dem letzten Export – jetzt sichern ›</span>`;
     notice.dataset.kind = 'export';
   } else if (!isStandalone() && !lsGet('hideInstallTip', false)) {
     html = '<span>Tipp: In Safari über „Teilen“ → „Zum Home-Bildschirm“ als App installieren. Tippen zum Ausblenden.</span>';
@@ -176,6 +181,7 @@ function renderFilters() {
     chip('methods', `${one(f.methods, id => esc(state.methods.get(id)?.name || '?'), 'Zubereitung')} ▾`, f.methods.length),
     chip('effort', `${f.effort.length ? `Aufwand ${[...f.effort].sort().join('+')}` : 'Aufwand'} ▾`, f.effort.length),
     chip('diets', `${one(f.diets, d => DIET_LABEL[d], 'Ernährung')} ▾`, f.diets.length),
+    chip('meatOpt', 'Fleisch ergänzbar', f.meatOpt),
     chip('cold', 'Schmeckt kalt', f.cold),
   ].join('');
 
@@ -192,6 +198,7 @@ function renderFilters() {
   for (const id of f.methods) pill(`data-rm-method="${esc(id)}"`, esc(state.methods.get(id)?.name || '?'));
   for (const e of f.effort) pill(`data-rm-effort="${e}"`, `Aufwand ${e}`);
   for (const d of f.diets) pill(`data-rm-diet="${d}"`, DIET_LABEL[d]);
+  if (f.meatOpt) pill('data-rm="meatOpt"', 'Fleisch ergänzbar');
   if (f.cold) pill('data-rm="cold"', 'Schmeckt kalt');
   const row = $('#activeRow');
   row.hidden = !pills.length;
@@ -210,7 +217,7 @@ function onActivePill(e) {
   if (d.rmEffort) f.effort = f.effort.filter(x => x !== Number(d.rmEffort));
   if (d.rmDiet) f.diets = f.diets.filter(x => x !== d.rmDiet);
   if (d.rm === 'maxTime') f.maxTime = null;
-  if (d.rm === 'mealPrep' || d.rm === 'fav' || d.rm === 'cold') f[d.rm] = false;
+  if (['mealPrep', 'fav', 'cold', 'meatOpt'].includes(d.rm)) f[d.rm] = false;
   refresh();
 }
 
@@ -230,7 +237,7 @@ function refresh() {
 function onFilterChip(e) {
   const key = e.target.closest('[data-f]')?.dataset.f;
   if (!key) return;
-  if (key === 'mealPrep' || key === 'fav' || key === 'cold') {
+  if (['mealPrep', 'fav', 'cold', 'meatOpt'].includes(key)) {
     filters[key] = !filters[key];
     return refresh();
   }
@@ -247,7 +254,8 @@ function onFilterChip(e) {
     return multiSheet('Aufwand', [1, 2, 3].map(n => ({ value: n, label: `${n} · ${EFFORT[n]}` })), 'effort');
   }
   if (key === 'diets') {
-    return multiSheet('Ernährung', DIETS.map(([v, l]) => ({ value: v, label: l })), 'diets', '„Vegetarisch“ zeigt auch vegane Gerichte.');
+    return multiSheet('Ernährung', DIETS.map(([v, l]) => ({ value: v, label: l })), 'diets',
+      '„Vegetarisch“ zeigt auch vegane Gerichte. Für Gerichte, zu denen man Fleisch extra machen kann, gibt es den Filter „Fleisch ergänzbar“.');
   }
 }
 
@@ -256,7 +264,7 @@ function choiceSheet(title, options, current, onPick) {
   const s = openSheet({
     title,
     body: `<div class="option-list">${options.map((o, i) =>
-      `<button class="option ${o.value === current ? 'on' : ''}" data-i="${i}">${o.label}${o.value === current ? '<span class="check">✓</span>' : ''}</button>`).join('')}</div>`,
+      `<button class="option ${o.value === current ? 'on' : ''}" data-i="${i}">${o.label}${o.value === current ? `<span class="check">${icon.check(20)}</span>` : ''}</button>`).join('')}</div>`,
   });
   s.body.addEventListener('click', e => {
     const b = e.target.closest('[data-i]');
@@ -274,7 +282,7 @@ function multiSheet(title, options, key, hint = '') {
   const render = () => {
     const sel = filters[key];
     s.body.innerHTML = `${hint ? `<p class="hint">${hint}</p>` : ''}<div class="option-list">${options.map((o, i) =>
-      `<button class="option ${sel.includes(o.value) ? 'on' : ''}" data-i="${i}">${o.label}${sel.includes(o.value) ? '<span class="check">✓</span>' : ''}</button>`).join('')}</div>`;
+      `<button class="option ${sel.includes(o.value) ? 'on' : ''}" data-i="${i}">${o.label}${sel.includes(o.value) ? `<span class="check">${icon.check(20)}</span>` : ''}</button>`).join('')}</div>`;
     s.setFoot(`<button class="btn" data-clear>Leeren</button>${showButton()}`);
   };
   s.el.addEventListener('click', e => {
@@ -305,7 +313,7 @@ function openIngredientSheet() {
         <button data-mode="all">alle enthalten</button><button data-mode="any">mindestens eine</button>
       </div>
       <p class="hint" id="modeHint"></p>
-      <input class="input" id="ingQ" type="search" placeholder="Zutat suchen" autocomplete="off" autocorrect="off" style="margin:8px 0 12px">
+      <input class="input" id="ingQ" type="search" name="zutatsuche" placeholder="Zutat suchen" autocomplete="off" autocorrect="off" style="margin:10px 0 12px">
       <div class="chips" id="ingChips"></div>`,
   });
   const chipsEl = $('#ingChips', s.el);
@@ -364,7 +372,7 @@ function cardHtml({ dish: d, hits }) {
   const icons = d.methodIds.map(id => state.methods.get(id)?.icon || '').join(' ');
   const meta = [
     filters.ings.length && filters.ingMode === 'any' ? `<span class="hits">${hits} von ${filters.ings.length}</span>` : '',
-    d.timeMin != null ? `<span>⏱ ${d.timeMin} min</span>` : '',
+    d.timeMin != null ? `<span>${icon.clock(13)} ${d.timeMin} min</span>` : '',
     icons ? `<span>${esc(icons)}</span>` : '',
     `<span>${d.lastCooked ? `zuletzt ${relDays(d.lastCooked)}` : 'noch nie gekocht'}</span>`,
   ].join('');
@@ -382,7 +390,7 @@ function renderList() {
   const list = $('#list');
   $('#count').textContent = results.length === total ? plural(total, 'Gericht', 'Gerichte') : `${results.length} von ${total} Gerichten`;
   const sortLabel = filters.ings.length && filters.ingMode === 'any' ? 'Treffer, dann ' + SORTS[sort] : SORTS[sort];
-  $('#btnSort').textContent = `↕ ${sortLabel}`;
+  $('#btnSort').innerHTML = `${icon.sort(15)} ${esc(sortLabel)}`;
   $('#btnRandom').disabled = !results.length;
 
   if (!total) {
@@ -418,12 +426,12 @@ function openRandom() {
       ${thumb ? `<img class="pick-photo" id="pickImg" src="${thumb}" alt="">` : ''}
       <div class="pick-name">${esc(d.name)} ${d.favorite ? '<span class="fav">★</span>' : ''}</div>
       <div class="pick-sub">${esc(d.ingredientIds.map(ingName).join(', '))}</div>
-      <p class="pick-sub">${[d.timeMin != null ? `⏱ ${d.timeMin} min` : '', esc(icons)].filter(Boolean).join(' · ')}</p>
+      <p class="pick-sub">${[d.timeMin != null ? `${icon.clock(15)} ${d.timeMin} min` : '', esc(icons)].filter(Boolean).join(' · ')}</p>
       <p class="pick-sub">${d.lastCooked ? `Zuletzt gekocht ${relDays(d.lastCooked)}` : 'Noch nie gekocht'} ·
         <button class="link-btn" data-open style="padding:0;min-height:0">Details ansehen ›</button></p>
       <p class="hint">Aus ${plural(pool.length, 'Gericht', 'Gerichten')} der aktuellen Auswahl.</p>`;
-    s.setFoot(`<button class="btn big grow" data-again>↻ Nochmal</button>
-      ${isMain() ? '<button class="btn primary big grow" data-cook>✓ Machen wir</button>' : ''}`);
+    s.setFoot(`<button class="btn tinted big grow" data-again>${icon.again(20)} Nochmal</button>
+      ${isMain() ? `<button class="btn primary big grow" data-cook>${icon.check(20)} Machen wir</button>` : ''}`);
     s.current = d;
     if (thumb) {
       photoUrl(d.id).then(u => {

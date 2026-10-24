@@ -82,8 +82,9 @@ export async function readJsonFile(file) {
 
 // ---------- Prüfen ----------
 
+// "fisch" aus älteren Dateien zählt als nicht vegetarisch
 const DIET_ALIASES = {
-  fleisch: 'fleisch', fisch: 'fisch', vegetarisch: 'vegetarisch', veggie: 'vegetarisch', vegan: 'vegan',
+  fleisch: 'fleisch', 'mit fleisch': 'fleisch', fisch: 'fleisch', vegetarisch: 'vegetarisch', veggie: 'vegetarisch', vegan: 'vegan',
 };
 
 const METHOD_ALIASES = {
@@ -107,10 +108,10 @@ function checkFields(raw, err) {
 
   const dRaw = opt(raw.diet, null);
   const diet = dRaw === null || dRaw === '' ? null : DIET_ALIASES[nameKey(dRaw)];
-  if (diet === undefined) err(`Ernährung „${dRaw}“ unbekannt (erlaubt: Fleisch, Fisch, vegetarisch, vegan)`);
+  if (diet === undefined) err(`Ernährung „${dRaw}“ unbekannt (erlaubt: vegan, vegetarisch, Fleisch)`);
   out.diet = diet || null;
 
-  for (const [k, def] of [['dinner', true], ['mealPrep', false], ['cold', false], ['favorite', false]]) {
+  for (const [k, def] of [['dinner', true], ['mealPrep', false], ['cold', false], ['meatOptional', false], ['favorite', false]]) {
     const v = opt(raw[k], def);
     if (typeof v !== 'boolean') err(`${k} muss true oder false sein`);
     out[k] = v === true;

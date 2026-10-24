@@ -21,17 +21,18 @@ export const filters = {
   diets: [],
   mealPrep: false,
   cold: false,
+  meatOpt: false,
   fav: false,
 };
 
 export function resetFilters() {
-  Object.assign(filters, { ings: [], ingMode: 'all', maxTime: null, methods: [], effort: [], diets: [], mealPrep: false, cold: false, fav: false });
+  Object.assign(filters, { ings: [], ingMode: 'all', maxTime: null, methods: [], effort: [], diets: [], mealPrep: false, cold: false, meatOpt: false, fav: false });
 }
 
 export function activeFilterCount() {
   const f = filters;
   return (f.ings.length ? 1 : 0) + (f.maxTime ? 1 : 0) + (f.methods.length ? 1 : 0) + (f.effort.length ? 1 : 0)
-    + (f.diets.length ? 1 : 0) + (f.mealPrep ? 1 : 0) + (f.cold ? 1 : 0) + (f.fav ? 1 : 0);
+    + (f.diets.length ? 1 : 0) + (f.mealPrep ? 1 : 0) + (f.cold ? 1 : 0) + (f.meatOpt ? 1 : 0) + (f.fav ? 1 : 0);
 }
 
 function haystack(d) {
@@ -59,6 +60,7 @@ export function query(text, sort = 'longest') {
     if (f.fav && !d.favorite) continue;
     if (f.mealPrep && !d.mealPrep) continue;
     if (f.cold && !d.cold) continue;
+    if (f.meatOpt && !(d.meatOptional && d.diet !== 'fleisch')) continue;
     if (f.maxTime && !(d.timeMin != null && d.timeMin <= f.maxTime)) continue;
     if (f.methods.length && !f.methods.some(m => d.methodIds.includes(m))) continue;
     if (f.effort.length && !f.effort.includes(d.effort)) continue;

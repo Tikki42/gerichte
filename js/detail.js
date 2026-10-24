@@ -4,6 +4,7 @@ import { state, isMain, ingName, photoUrl, markCooked, setFavorite, EFFORT, DIET
 import { esc, $, fmtDate, relDays, todayYMD } from './util.js';
 import { openPage, toast, showError, emitChange } from './ui.js';
 import { openEdit } from './edit.js';
+import { icon } from './icons.js';
 
 export function openDetail(id) {
   let photo = null;
@@ -30,7 +31,7 @@ export function openDetail(id) {
       ['Zubereitung', methods.length ? methods.map(m => `${esc(m.icon)} ${esc(m.name)}`).join('<br>') : '–'],
       ['Aufwand', d.effort ? `${d.effort} · ${EFFORT[d.effort]}` : '–'],
       ['Passt für', (esc(suits) || '–') + (d.cold ? '<br>schmeckt auch kalt' : '')],
-      ['Ernährung', d.diet ? DIET_LABEL[d.diet] : '–'],
+      ['Ernährung', (d.diet ? DIET_LABEL[d.diet] : '–') + (d.meatOptional && d.diet !== 'fleisch' ? '<br>Fleisch ergänzbar' : '')],
       ['Gekocht', d.lastCooked
         ? `zuletzt ${relDays(d.lastCooked)} (${fmtDate(d.lastCooked)})<br>insgesamt ${d.cookCount || 0}×`
         : 'noch nie'],
@@ -47,14 +48,14 @@ export function openDetail(id) {
         ${main ? `<button class="star-btn ${d.favorite ? 'on' : ''}" data-fav aria-label="Favorit">${d.favorite ? '★' : '☆'}</button>`
                : d.favorite ? '<span class="star-btn on">★</span>' : ''}
       </div>
-      <div style="margin-top:10px">${d.ingredientIds.map(i => `<span class="ing-chip">${esc(ingName(i))}</span>`).join('') || '<span class="muted">Keine Zutaten eingetragen</span>'}</div>
+      <div class="ing-chips">${d.ingredientIds.map(i => `<span class="ing-chip">${esc(ingName(i))}</span>`).join('') || '<span class="muted">Keine Zutaten eingetragen</span>'}</div>
       <div class="info">${rows.map(([k, v]) => `<div class="info-row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>
       <p class="hint">Angelegt am ${fmtDate(d.createdAt)} · geändert am ${fmtDate(d.updatedAt)}</p>`;
 
     const cookedToday = d.lastCooked === todayYMD();
     page.setFoot(main ? `<div class="btn-row">
-        <button class="btn primary big grow" data-cook ${cookedToday ? 'disabled' : ''}>${cookedToday ? '✓ Heute schon gekocht' : '✓ Heute gekocht'}</button>
-        <button class="btn big" data-edit>Bearbeiten</button>
+        <button class="btn primary big grow" data-cook ${cookedToday ? 'disabled' : ''}>${icon.check(20)} ${cookedToday ? 'Heute schon gekocht' : 'Heute gekocht'}</button>
+        <button class="btn tinted big" data-edit>Bearbeiten</button>
       </div>` : '');
 
     // Großes Foto nachladen (das Vorschaubild wird sofort gezeigt)

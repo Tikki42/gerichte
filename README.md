@@ -25,7 +25,8 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 | `js/db.js` | IndexedDB (jede Änderung in einer Transaktion: alles oder nichts) |
 | `js/photo.js` | Fotos verkleinern (1200 px JPEG + 360 px Vorschaubild) |
 | `js/pwa.js` | Service-Worker-Anbindung, Hinweis „Neue Version“ |
-| `js/ui.js`, `js/util.js` | Oberflächen-Bausteine, Hilfsfunktionen |
+| `js/ui.js`, `js/util.js` | Oberflächen-Bausteine, Hilfsfunktionen, Ausgleich für iOS-Lücke unten |
+| `js/icons.js` | Symbole (SVG) im Stil der iOS-Systemsymbole |
 
 ### Datenmodell (IndexedDB „gerichte“)
 
@@ -39,7 +40,7 @@ Gericht:
 
 ```
 id, name, ingredientIds[], timeMin, methodIds[], effort (1|2|3),
-dinner, mealPrep, cold, diet ("fleisch"|"fisch"|"vegetarisch"|"vegan"|null),
+dinner, mealPrep, cold, diet ("vegan"|"vegetarisch"|"fleisch"|null), meatOptional,
 favorite, tags[], note, link, lastCooked ("JJJJ-MM-TT"), cookCount, createdAt, updatedAt
 ```
 
@@ -61,15 +62,16 @@ Gerichte mit gleichem Namen oder gleicher ID wie ein vorhandenes werden überspr
   "kind": "dishes",
   "dishes": [
     {
-      "name": "Chili con Carne",
-      "ingredients": ["Hackfleisch", "Kidneybohnen", "Mais", "Tomaten"],
+      "name": "Chili sin Carne",
+      "ingredients": ["Kidneybohnen", "Mais", "Tomaten", "Paprika"],
       "timeMin": 45,
       "methods": ["Herd"],
       "effort": 3,
       "dinner": true,
       "mealPrep": true,
       "cold": false,
-      "diet": "fleisch",
+      "diet": "vegetarisch",
+      "meatOptional": true,
       "favorite": false,
       "tags": ["mexikanisch"],
       "note": "",
@@ -89,7 +91,8 @@ Gerichte mit gleichem Namen oder gleicher ID wie ein vorhandenes werden überspr
 | `dinner` | passt fürs Abendbrot | `true` |
 | `mealPrep` | zum Vorkochen fürs Mittag | `false` |
 | `cold` | schmeckt auch kalt | `false` |
-| `diet` | `fleisch`, `fisch`, `vegetarisch`, `vegan` | leer |
+| `diet` | `vegan`, `vegetarisch`, `fleisch` (ältere Angabe `fisch` zählt als `fleisch`) | leer |
+| `meatOptional` | Fleisch kann extra ergänzt werden (nur bei vegan/vegetarisch wirksam) | `false` |
 | `favorite`, `tags`, `note`, `link` | Favorit, freie Tags, Notiz, Link zum Originalrezept | leer |
 | `id` | optional; fehlt sie, wird eine UUID erzeugt | – |
 | `photo` | optional, `data:image/jpeg;base64,…` (wird verkleinert) | – |
@@ -133,3 +136,7 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
 - Daten ändern nur über Funktionen in `js/store.js` (sie aktualisieren auch den Export-Zähler).
   „Heute gekocht“/„Machen wir“ zählen bewusst nicht als Änderung für den Export-Hinweis.
 - Lesegerät: alle datenändernden Knöpfe werden über `isMain()` ausgeblendet.
+- Gestaltung: Farben als Variablen oben in `app.css` (hell und dunkel). Glas-Effekt über die Klasse `glass`.
+- Statusleiste: im Dunkelmodus durchscheinend (`black-translucent`), im Hellmodus normal (Skript in `index.html`).
+  Bei durchscheinender Statusleiste endet das Fenster auf manchen iOS-Versionen zu früh;
+  `fixBottomGap()` in `js/ui.js` misst die Lücke und setzt `--gap-bottom`.

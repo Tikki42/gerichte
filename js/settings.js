@@ -6,6 +6,7 @@ import { checkForUpdate, appVersion } from './pwa.js';
 import { esc, $, fmtDateTime, fmtDate, fmtBytes, plural, isStandalone } from './util.js';
 import { openPage, openSheet, confirmSheet, toast, showError, emitChange } from './ui.js';
 import { openIngredients, openMethods } from './manage.js';
+import { icon } from './icons.js';
 
 export function openSettings({ focus } = {}) {
   let prepared = null; // vorbereitete Exportdatei
@@ -54,9 +55,9 @@ export function openSettings({ focus } = {}) {
         ${main ? '' : `<p>Stand: <b>${m.lastImport ? fmtDate(m.dataStand) : 'noch keine Daten'}</b>
             ${m.lastImport ? `<br><span class="muted">geladen am ${fmtDateTime(m.lastImport.at)}</span>` : ''}</p>`}
         ${main ? `
-          <button class="btn" data-add>Gerichte hinzufügen …</button>
+          <button class="btn tinted" data-add>Gerichte hinzufügen …</button>
           <p class="hint">Übernimmt aus einer Datei nur Gerichte, die noch fehlen.</p>
-          <button class="btn" data-replace style="margin-top:12px">Backup wiederherstellen …</button>
+          <button class="btn tinted" data-replace style="margin-top:14px">Backup wiederherstellen …</button>
           <p class="hint">Ersetzt alle Gerichte durch den Stand aus einer Exportdatei.</p>`
         : '<button class="btn primary" data-replace>Daten aktualisieren …</button>'}
       </div></div>
@@ -71,7 +72,7 @@ export function openSettings({ focus } = {}) {
       <div class="section"><h3>App</h3><div class="box">
         <p>Bestand: ${plural(state.dishes.size, 'Gericht', 'Gerichte')}, ${plural(state.thumbs.size, 'Foto', 'Fotos')}</p>
         <p>Version: <b id="ver">…</b></p>
-        <button class="btn" data-update>Nach neuer Version suchen</button>
+        <button class="btn tinted" data-update>Nach neuer Version suchen</button>
       </div></div>`;
     renderStorage();
     appVersion().then(v => { const el = $('#ver', page.el); if (el) el.textContent = v; });
@@ -90,7 +91,7 @@ export function openSettings({ focus } = {}) {
       ${estimate?.usage != null ? `<p class="muted">Belegt: ${fmtBytes(estimate.usage)}</p>` : ''}
       ${persisted === false ? `<p class="hint">Ohne dauerhaften Speicher kann iOS die Daten bei Speichermangel löschen. Regelmäßig exportieren!
         ${isStandalone() ? '' : 'Tipp: In der Home-Bildschirm-App wird er meist gewährt.'}</p>
-        <button class="btn" data-persist>Erneut anfordern</button>` : ''}
+        <button class="btn tinted" data-persist>Erneut anfordern</button>` : ''}
       ${asked && persisted === false ? '<p class="hint">iOS hat die Anfrage abgelehnt.</p>' : ''}`;
   }
 
@@ -188,7 +189,7 @@ export function openImport(mode) {
     title,
     body: `
       <p>${intro}</p>
-      <label class="btn primary full file-label">📄 Datei wählen<input type="file" id="impFile" accept=".json,application/json"></label>
+      <label class="btn primary full file-label">${icon.file(20)} Datei wählen<input type="file" id="impFile" accept=".json,application/json"></label>
       <div id="impResult"></div>`,
   });
   const out = $('#impResult', s.el);

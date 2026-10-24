@@ -104,7 +104,7 @@ export function openMethods() {
     page.body.innerHTML = `
       <div class="list-box">${methodList().map(m =>
         `<button class="list-row" data-id="${esc(m.id)}">${esc(m.icon)} ${esc(m.name)}<span class="count">${plural(usage.get(m.id) || 0, 'Gericht', 'Gerichte')}</span></button>`).join('')}</div>
-      <button class="btn full" data-new style="margin-top:14px">+ Neue Zubereitungsart</button>`;
+      <button class="btn tinted full" data-new style="margin-top:14px">+ Neue Zubereitungsart</button>`;
   };
   page.body.addEventListener('click', e => {
     const row = e.target.closest('[data-id]');

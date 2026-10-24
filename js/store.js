@@ -20,10 +20,9 @@ export const EFFORT = {
 };
 
 export const DIETS = [
-  ['fleisch', 'Fleisch'],
-  ['fisch', 'Fisch'],
-  ['vegetarisch', 'Vegetarisch'],
   ['vegan', 'Vegan'],
+  ['vegetarisch', 'Vegetarisch'],
+  ['fleisch', 'Mit Fleisch'],
 ];
 export const DIET_LABEL = Object.fromEntries(DIETS);
 
@@ -163,6 +162,7 @@ export function blankDish() {
     mealPrep: false,
     cold: false,
     diet: null,
+    meatOptional: false, // bei vegetarischen/veganen Gerichten: Fleisch kann extra ergänzt werden
     favorite: false,
     tags: [],
     note: '',

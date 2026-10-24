@@ -4,8 +4,12 @@ import { state, blankDish, saveDish, deleteDish, ingName, ingredientUsage, tagUs
 import { processPhoto } from './photo.js';
 import { esc, $, $$, cleanName, capFirst, nameKey, fold } from './util.js';
 import { openPage, confirmSheet, toast, showError, emitChange } from './ui.js';
+import { icon } from './icons.js';
 
 const TIME_CHOICES = [10, 15, 20, 30, 45, 60, 90];
+
+const switchRow = (flag, label) =>
+  `<button type="button" class="switch-row" data-flag="${flag}"><span>${label}</span><span class="switch" aria-hidden="true"></span></button>`;
 
 export function openEdit(id, { onSaved } = {}) {
   const isNew = !id;
@@ -25,8 +29,8 @@ export function openEdit(id, { onSaved } = {}) {
 
   page.body.innerHTML = `
     <div class="field">
-      <label for="fName">Name</label>
-      <input class="input" id="fName" value="${esc(draft.name)}" placeholder="z. B. Chili con Carne" autocomplete="off" enterkeyhint="next">
+      <label for="fTitle">Gericht</label>
+      <input class="input" id="fTitle" name="gericht" value="${esc(draft.name)}" placeholder="z. B. Gemüsecurry" autocomplete="off" enterkeyhint="next">
     </div>
     <div class="field">
       <div class="label">Hauptzutaten</div>
@@ -42,34 +46,36 @@ export function openEdit(id, { onSaved } = {}) {
     <div class="field">
       <div class="label">Zubereitung</div>
       <div class="chips" id="fMethods">${methodList().map(m =>
-        `<button type="button" class="chip" data-method="${esc(m.id)}">${esc(m.icon)} ${esc(m.name)}</button>`).join('')}</div>
+        `<button type="button" class="chip" data-method="${esc(m.id)}"><span>${esc(m.icon)}</span>${esc(m.name)}</button>`).join('')}</div>
     </div>
     <div class="field">
       <div class="label">Aufwand</div>
       <div class="option-list" id="fEffort">${[1, 2, 3].map(n =>
-        `<button type="button" class="option" data-effort="${n}"><b>${n}</b> ${EFFORT[n]}</button>`).join('')}</div>
+        `<button type="button" class="option" data-effort="${n}"><b>${n}</b> ${EFFORT[n]}<span class="check">${icon.check(20)}</span></button>`).join('')}</div>
     </div>
     <div class="field">
       <div class="label">Passt für</div>
-      <div class="chips" id="fSuits">
-        <button type="button" class="chip" data-flag="dinner">Abendbrot</button>
-        <button type="button" class="chip" data-flag="mealPrep">Vorkochen fürs Mittag</button>
-        <button type="button" class="chip" data-flag="cold">Schmeckt auch kalt</button>
+      <div class="switch-list">
+        ${switchRow('dinner', 'Abendbrot')}
+        ${switchRow('mealPrep', 'Vorkochen fürs Mittag')}
+        ${switchRow('cold', 'Schmeckt auch kalt')}
       </div>
     </div>
     <div class="field">
       <div class="label">Ernährung</div>
       <div class="segmented" id="fDiet">${DIETS.map(([v, l]) => `<button type="button" data-diet="${v}">${l}</button>`).join('')}</div>
+      <div class="switch-list" style="margin-top:10px">${switchRow('meatOptional', 'Fleisch ergänzbar')}</div>
+      <p class="hint">Z. B. Hähnchen extra dazu machen. Nur bei vegetarischen und veganen Gerichten.</p>
     </div>
     <div class="field">
-      <div class="chips"><button type="button" class="chip" data-flag="favorite">★ Favorit</button></div>
+      <div class="switch-list">${switchRow('favorite', '★ Favorit')}</div>
     </div>
     <div class="field">
       <div class="label">Foto</div>
       <div class="photo-box">
         <div id="fPhotoPrev"></div>
         <div class="btn-col">
-          <label class="btn file-label">📷 Foto wählen<input type="file" id="fPhoto" accept="image/*"></label>
+          <label class="btn tinted file-label">${icon.camera(20)} Foto wählen<input type="file" id="fPhoto" accept="image/*"></label>
           <button type="button" class="btn danger" id="fPhotoDel">Foto entfernen</button>
         </div>
       </div>
@@ -115,8 +121,9 @@ export function openEdit(id, { onSaved } = {}) {
     $$('[data-effort]', page.el).forEach(b => b.classList.toggle('on', draft.effort === Number(b.dataset.effort)));
     $$('[data-flag]', page.el).forEach(b => b.classList.toggle('on', !!draft[b.dataset.flag]));
     $$('[data-diet]', page.el).forEach(b => b.classList.toggle('on', draft.diet === b.dataset.diet));
+    $('[data-flag="meatOptional"]', page.el).disabled = draft.diet === 'fleisch';
     const url = photo === null ? null : photo?.url || state.thumbs.get(draft.id);
-    $('#fPhotoPrev', page.el).innerHTML = url ? `<img class="thumb" src="${url}" alt="">` : '<div class="thumb">📷</div>';
+    $('#fPhotoPrev', page.el).innerHTML = url ? `<img class="thumb" src="${url}" alt="">` : `<div class="thumb">${icon.camera(30)}</div>`;
     $('#fPhotoDel', page.el).hidden = !url;
   };
 
@@ -153,7 +160,7 @@ export function openEdit(id, { onSaved } = {}) {
     sync();
   });
 
-  $('#fName', page.el).addEventListener('keydown', e => {
+  $('#fTitle', page.el).addEventListener('keydown', e => {
     if (e.key === 'Enter') { e.preventDefault(); $('#fIngs input', page.el).focus(); }
   });
   $('#fSave', page.el).addEventListener('click', save);
@@ -161,10 +168,10 @@ export function openEdit(id, { onSaved } = {}) {
   async function save() {
     ingField.commitPending();
     tagField.commitPending();
-    const name = cleanName($('#fName', page.el).value);
+    const name = cleanName($('#fTitle', page.el).value);
     if (!name) {
       toast('Bitte einen Namen eingeben.');
-      $('#fName', page.el).focus();
+      $('#fTitle', page.el).focus();
       return;
     }
     const dup = findDishByName(name, draft.id);
@@ -180,6 +187,7 @@ export function openEdit(id, { onSaved } = {}) {
       link,
       tags: tags.map(x => x.name),
     });
+    if (draft.diet === 'fleisch') draft.meatOptional = false;
     const btn = $('#fSave', page.el);
     btn.disabled = true;
     try {
@@ -208,7 +216,7 @@ export function openEdit(id, { onSaved } = {}) {
   }
 
   sync();
-  if (isNew) setTimeout(() => $('#fName', page.el)?.focus(), 250);
+  if (isNew) setTimeout(() => $('#fTitle', page.el)?.focus(), 250);
 }
 
 // Eingabefeld mit Chips und Vorschlägen (für Zutaten und Tags).

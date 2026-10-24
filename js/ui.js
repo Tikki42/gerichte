@@ -1,6 +1,7 @@
 // Bausteine der Oberfläche: Vollbild-Seiten, Bottom Sheets, Rückfragen, Hinweise.
 
-import { esc, $ } from './util.js';
+import { esc, $, isStandalone } from './util.js';
+import { icon } from './icons.js';
 
 const layer = () => document.getElementById('overlays');
 
@@ -13,20 +14,30 @@ export function openPage({ title, body = '', foot = '', back = 'Zurück', right 
   document.activeElement?.blur?.();
   const el = document.createElement('section');
   el.className = 'page';
+  // "Zurück" als runder Glas-Knopf mit Pfeil, andere Beschriftungen (z. B. "Abbrechen") als Text
+  const backBtn = back === 'Zurück'
+    ? `<button class="nav-btn icon-only glass" data-back aria-label="Zurück">${icon.back(22)}</button>`
+    : `<button class="nav-btn glass" data-back>${esc(back)}</button>`;
   el.innerHTML = `
     <header class="page-head">
-      <button class="icon-btn" data-back>‹ ${esc(back)}</button>
+      ${backBtn}
       <h2>${esc(title)}</h2>
-      ${right || '<span class="spacer"></span>'}
+      ${right || '<span></span>'}
     </header>
     <div class="page-body">${body}</div>
-    <footer class="page-foot" ${foot ? '' : 'hidden'}>${foot}</footer>`;
+    <div class="bottom-fade" hidden></div>
+    <footer class="page-foot" hidden></footer>`;
   layer().append(el);
   const page = {
     el,
     body: $('.page-body', el),
     foot: $('.page-foot', el),
-    setFoot(html) { this.foot.innerHTML = html; this.foot.hidden = !html; },
+    setFoot(html) {
+      this.foot.innerHTML = html;
+      this.foot.hidden = !html;
+      $('.bottom-fade', el).hidden = !html;
+      el.classList.toggle('has-foot', !!html);
+    },
     close() {
       if (!el.isConnected) return;
       el.remove();
@@ -38,6 +49,7 @@ export function openPage({ title, body = '', foot = '', back = 'Zurück', right 
     },
   };
   $('[data-back]', el).addEventListener('click', () => page.tryClose());
+  page.setFoot(foot);
   return page;
 }
 
@@ -49,7 +61,7 @@ export function openSheet({ title, body = '', foot = '', onClose }) {
   bd.className = 'backdrop';
   bd.innerHTML = `
     <div class="sheet" role="dialog" aria-label="${esc(title)}">
-      <div class="sheet-head"><h3>${esc(title)}</h3><button class="icon-btn" data-x aria-label="Schließen">✕</button></div>
+      <div class="sheet-head"><h3>${esc(title)}</h3><button class="close-btn" data-x aria-label="Schließen">${icon.close(16)}</button></div>
       <div class="sheet-body">${body}</div>
       <div class="sheet-foot" ${foot ? '' : 'hidden'}>${foot}</div>
     </div>`;
@@ -92,6 +104,27 @@ export function alertSheet(title, html) {
     const s = openSheet({ title, body: html, foot: '<button class="btn primary grow" data-ok>OK</button>', onClose: resolve });
     $('[data-ok]', s.el).addEventListener('click', () => s.close());
   });
+}
+
+// ---------- iOS-Ausgleich ----------
+
+// Bekannter iOS-Fehler bei Home-Bildschirm-Apps mit durchscheinender Statusleiste:
+// das Fenster endet um die Statusleisten-Höhe zu früh, unten bleibt ein leerer Streifen.
+// Wir messen die Lücke und verlängern die Vollbild-Ebenen entsprechend (CSS: --gap-bottom).
+export function fixBottomGap() {
+  const apply = () => {
+    let gap = 0;
+    if (isStandalone()) {
+      const portrait = window.innerHeight >= window.innerWidth;
+      const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
+      const g = Math.round(full - window.innerHeight);
+      if (g > 0 && g <= 100) gap = g;
+    }
+    document.documentElement.style.setProperty('--gap-bottom', `${gap}px`);
+  };
+  apply();
+  window.addEventListener('resize', apply);
+  window.addEventListener('orientationchange', () => setTimeout(apply, 300));
 }
 
 // ---------- Hinweis unten ----------

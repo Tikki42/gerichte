@@ -9,8 +9,14 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Gerichte">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <meta name="theme-color" content="#2f6b4f" media="(prefers-color-scheme: light)">
-  <meta name="theme-color" content="#16211c" media="(prefers-color-scheme: dark)">
+  <script>
+    // Hellmodus: normale Statusleiste mit dunkler Schrift (die durchscheinende hat immer weiße Schrift)
+    if (!matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'default';
+    }
+  </script>
+  <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="icon" href="icons/icon-192.png" type="image/png">
