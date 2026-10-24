@@ -380,11 +380,10 @@ function cardHtml({ dish: d, hits }) {
     : `<div class="thumb" aria-hidden="true">${esc(d.name.charAt(0).toUpperCase())}</div>`;
   const sel = new Set(filters.ings);
   const ings = d.ingredientIds.map(id => (sel.has(id) ? `<b>${esc(ingName(id))}</b>` : esc(ingName(id)))).join(', ');
-  const icons = d.methodIds.map(id => state.methods.get(id)?.icon || '').join(' ');
+  // Linksbündig: Blitz, Fleisch (jeweils nur wenn gesetzt), zuletzt gekocht
   const meta = [
-    filters.ings.length && filters.ingMode === 'any' ? `<span class="hits">${hits} von ${filters.ings.length}</span>` : '',
     d.quick ? `<span class="quick">${icon.bolt(13)} Blitz</span>` : '',
-    icons ? `<span>${esc(icons)}</span>` : '',
+    d.meatOptional ? `<span class="meat">${icon.meat(13)} +Fleisch</span>` : '',
     `<span>${d.lastCooked ? `zuletzt ${relDays(d.lastCooked)}` : 'noch nie gekocht'}</span>`,
   ].join('');
   return `<button class="card" data-id="${esc(d.id)}">${img}
@@ -437,7 +436,11 @@ function openRandom() {
       ${thumb ? `<img class="pick-photo" id="pickImg" src="${thumb}" alt="">` : ''}
       <div class="pick-name">${esc(d.name)} ${d.favorite ? '<span class="fav">★</span>' : ''}</div>
       <div class="pick-sub">${esc(d.ingredientIds.map(ingName).join(', '))}</div>
-      <p class="pick-sub">${[d.quick ? `<span class="quick">${icon.bolt(15)} Blitzgericht</span>` : '', esc(icons)].filter(Boolean).join(' · ')}</p>
+      <p class="pick-sub">${[
+        d.quick ? `<span class="quick">${icon.bolt(15)} Blitzgericht</span>` : '',
+        d.meatOptional ? `<span class="meat">${icon.meat(15)} Fleisch ergänzbar</span>` : '',
+        esc(icons),
+      ].filter(Boolean).join(' · ')}</p>
       <p class="pick-sub">${d.lastCooked ? `Zuletzt gekocht ${relDays(d.lastCooked)}` : 'Noch nie gekocht'} ·
         <button class="link-btn" data-open style="padding:0;min-height:0">Details ansehen ›</button></p>
       <p class="hint">Aus ${plural(pool.length, 'Gericht', 'Gerichten')} der aktuellen Auswahl.</p>`;

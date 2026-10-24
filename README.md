@@ -13,7 +13,7 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 | `app.css` | Gestaltung (hell/dunkel automatisch) |
 | `manifest.webmanifest` | App-Name, Icon, `display: standalone` |
 | `sw.js` | Service Worker: Offline-Betrieb, **enthält die Versionsnummer** |
-| `icons/` | App-Icons (PNG) |
+| `icons/` | App-Icons (PNG) und ihre Vorlage `icon-source.svg` |
 | `js/app.js` | Start, Startseite (Suche, Filter, Liste), „Was essen wir heute?“ |
 | `js/detail.js` | Detailansicht eines Gerichts |
 | `js/edit.js` | Anlegen/Bearbeiten (Zutaten- und Tag-Eingabe mit Vorschlägen) |
@@ -123,6 +123,20 @@ Transaktion – bei einem Fehler bleibt der alte Stand erhalten.
    „Neue Version verfügbar“ → „Neu laden“. Die Daten bleiben dabei erhalten.
 
 Nicht hochladen: den Ordner `.claude/` (nur für lokale Tests).
+
+## App-Icon ändern
+
+Vorlage ist `icons/icon-source.svg` (1024 × 1024, ohne abgerundete Ecken – die rundet iOS selbst).
+PNGs daraus auf dem Mac erzeugen (Quick Look rendert das SVG, `sips` skaliert):
+
+```bash
+qlmanage -t -s 1024 -o /tmp icons/icon-source.svg
+```
+
+Danach `/tmp/icon-source.svg.png` über JPEG (entfernt die Transparenz) in 512, 192 und 180 px als
+`icon-512.png`, `icon-192.png` und `apple-touch-icon.png` speichern, Version in `sw.js` erhöhen.
+Achtung: iOS übernimmt ein neues Icon erst, wenn die App neu zum Home-Bildschirm hinzugefügt wird.
+Das löscht die Daten der App – vorher exportieren, danach „Backup wiederherstellen“.
 
 ## Lokal testen
 
