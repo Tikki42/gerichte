@@ -3,7 +3,7 @@
 import { state, load, isMain, setMeta, ingName, methodList, ingredientUsage, markCooked, photoUrl, DIETS, DIET_LABEL, EFFORT } from './store.js';
 import { filters, resetFilters, activeFilterCount, query, pickRandom, SORTS, TIME_STEPS } from './search.js';
 import { esc, $, fmtShort, relDays, lsGet, lsSet, isStandalone, fold, plural } from './util.js';
-import { openSheet, toast, showError, emitChange, fixBottomGap } from './ui.js';
+import { openSheet, toast, showError, emitChange } from './ui.js';
 import { icon } from './icons.js';
 import { initServiceWorker } from './pwa.js';
 import { openDetail } from './detail.js';
@@ -25,7 +25,6 @@ async function boot() {
     app.innerHTML = `<div class="boot">Die Daten konnten nicht geladen werden.<br><br>${esc(e.message)}</div>`;
     return;
   }
-  fixBottomGap();
   initServiceWorker();
   requestPersistentStorage();
   document.addEventListener('data-changed', () => { if ($('#list')) renderAll(); });

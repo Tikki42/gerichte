@@ -85,10 +85,8 @@ a { color: var(--tint); }
 
 .boot { padding: 40vh 20px 0; text-align: center; color: var(--text-2); }
 
-/* Vollbild-Ebenen. --gap-bottom gleicht einen iOS-Fehler aus (Fenster endet sonst zu früh). */
-#app, .page, .backdrop {
-  position: fixed; top: 0; left: 0; right: 0; bottom: calc(0px - var(--gap-bottom, 0px));
-}
+/* Vollbild-Ebenen */
+#app, .page, .backdrop { position: fixed; inset: 0; }
 
 /* ---------- Glas ---------- */
 
@@ -419,7 +417,7 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.4; }
 /* ---------- Hinweise ---------- */
 
 #toasts {
-  position: fixed; left: 16px; right: 16px; bottom: calc(var(--bar-bottom) + 70px - var(--gap-bottom, 0px)); z-index: 60;
+  position: fixed; left: 16px; right: 16px; bottom: calc(var(--bar-bottom) + 70px); z-index: 60;
   display: flex; flex-direction: column; gap: 8px; pointer-events: none;
 }
 .toast {

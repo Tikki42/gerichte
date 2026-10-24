@@ -8,13 +8,8 @@
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-title" content="Gerichte">
-  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-  <script>
-    // Hellmodus: normale Statusleiste mit dunkler Schrift (die durchscheinende hat immer weiße Schrift)
-    if (!matchMedia('(prefers-color-scheme: dark)').matches) {
-      document.querySelector('meta[name="apple-mobile-web-app-status-bar-style"]').content = 'default';
-    }
-  </script>
+  <!-- Normale Statusleiste: Mit "black-translucent" zeichnet iOS die unteren ca. 60 pt nicht (WebKit-Fehler). -->
+  <meta name="apple-mobile-web-app-status-bar-style" content="default">
   <meta name="theme-color" content="#f2f2f7" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#000000" media="(prefers-color-scheme: dark)">
   <meta name="color-scheme" content="light dark">

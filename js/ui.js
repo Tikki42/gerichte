@@ -1,6 +1,6 @@
 // Bausteine der Oberfläche: Vollbild-Seiten, Bottom Sheets, Rückfragen, Hinweise.
 
-import { esc, $, isStandalone } from './util.js';
+import { esc, $ } from './util.js';
 import { icon } from './icons.js';
 
 const layer = () => document.getElementById('overlays');
@@ -104,27 +104,6 @@ export function alertSheet(title, html) {
     const s = openSheet({ title, body: html, foot: '<button class="btn primary grow" data-ok>OK</button>', onClose: resolve });
     $('[data-ok]', s.el).addEventListener('click', () => s.close());
   });
-}
-
-// ---------- iOS-Ausgleich ----------
-
-// Bekannter iOS-Fehler bei Home-Bildschirm-Apps mit durchscheinender Statusleiste:
-// das Fenster endet um die Statusleisten-Höhe zu früh, unten bleibt ein leerer Streifen.
-// Wir messen die Lücke und verlängern die Vollbild-Ebenen entsprechend (CSS: --gap-bottom).
-export function fixBottomGap() {
-  const apply = () => {
-    let gap = 0;
-    if (isStandalone()) {
-      const portrait = window.innerHeight >= window.innerWidth;
-      const full = portrait ? Math.max(screen.width, screen.height) : Math.min(screen.width, screen.height);
-      const g = Math.round(full - window.innerHeight);
-      if (g > 0 && g <= 100) gap = g;
-    }
-    document.documentElement.style.setProperty('--gap-bottom', `${gap}px`);
-  };
-  apply();
-  window.addEventListener('resize', apply);
-  window.addEventListener('orientationchange', () => setTimeout(apply, 300));
 }
 
 // ---------- Hinweis unten ----------

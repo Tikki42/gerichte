@@ -25,7 +25,7 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 | `js/db.js` | IndexedDB (jede Änderung in einer Transaktion: alles oder nichts) |
 | `js/photo.js` | Fotos verkleinern (1200 px JPEG + 360 px Vorschaubild) |
 | `js/pwa.js` | Service-Worker-Anbindung, Hinweis „Neue Version“ |
-| `js/ui.js`, `js/util.js` | Oberflächen-Bausteine, Hilfsfunktionen, Ausgleich für iOS-Lücke unten |
+| `js/ui.js`, `js/util.js` | Oberflächen-Bausteine, Hilfsfunktionen |
 | `js/icons.js` | Symbole (SVG) im Stil der iOS-Systemsymbole |
 
 ### Datenmodell (IndexedDB „gerichte“)
@@ -137,6 +137,6 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
   „Heute gekocht“/„Machen wir“ zählen bewusst nicht als Änderung für den Export-Hinweis.
 - Lesegerät: alle datenändernden Knöpfe werden über `isMain()` ausgeblendet.
 - Gestaltung: Farben als Variablen oben in `app.css` (hell und dunkel). Glas-Effekt über die Klasse `glass`.
-- Statusleiste: im Dunkelmodus durchscheinend (`black-translucent`), im Hellmodus normal (Skript in `index.html`).
-  Bei durchscheinender Statusleiste endet das Fenster auf manchen iOS-Versionen zu früh;
-  `fixBottomGap()` in `js/ui.js` misst die Lücke und setzt `--gap-bottom`.
+- Statusleiste: bewusst `default` (nicht `black-translucent`). Mit durchscheinender Statusleiste zeichnet iOS
+  (getestet iOS 27, iPhone mit Dynamic Island) die unteren ca. 60 pt nicht – unten entsteht ein leerer Streifen,
+  der sich per CSS nicht füllen lässt. Die Farbe der Statusleiste kommt aus `theme-color` in `index.html`.
