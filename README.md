@@ -39,9 +39,15 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 Gericht:
 
 ```
-id, name, ingredientIds[], timeMin, methodIds[], effort (1|2|3),
-dinner, mealPrep, cold, diet ("vegan"|"vegetarisch"|"fleisch"|null), meatOptional,
+id, name, ingredientIds[], methodIds[], effort (1|2|3), diet ("vegan"|"vegetarisch"|null),
+quick (Blitzgericht), mealPrep (fürs Vorkochen), cold (kaltes Gericht), meatOptional (Fleisch ergänzbar),
 favorite, tags[], note, link, lastCooked ("JJJJ-MM-TT"), cookCount, createdAt, updatedAt
+```
+
+Frühere Felder `timeMin` (Zeit) und `dinner` (Abendbrot) werden nicht mehr verwendet; stehen sie noch in
+alten Einträgen oder Dateien, bleiben sie einfach unbeachtet erhalten.
+
+```
 ```
 
 Unbekannte Zusatzfelder bleiben bei Export und Import erhalten. Spätere Funktionen
@@ -64,13 +70,12 @@ Gerichte mit gleichem Namen oder gleicher ID wie ein vorhandenes werden überspr
     {
       "name": "Chili sin Carne",
       "ingredients": ["Kidneybohnen", "Mais", "Tomaten", "Paprika"],
-      "timeMin": 45,
       "methods": ["Herd"],
       "effort": 3,
-      "dinner": true,
+      "diet": "vegetarisch",
+      "quick": false,
       "mealPrep": true,
       "cold": false,
-      "diet": "vegetarisch",
       "meatOptional": true,
       "favorite": false,
       "tags": ["mexikanisch"],
@@ -85,14 +90,13 @@ Gerichte mit gleichem Namen oder gleicher ID wie ein vorhandenes werden überspr
 |---|---|---|
 | `name` | Text (Pflicht) | – |
 | `ingredients` | Liste von Zutatennamen | `[]` |
-| `timeMin` | Minuten gesamt (Zahl) | leer |
 | `methods` | `Herd`, `Ofen`, `Heißluftfritteuse`, `Mikrowelle`, `Grill`, `ohne Kochen` (oder neue) | `[]` |
 | `effort` | `1` kaufen + aufwärmen, `2` mit Fertigprodukten, `3` komplett selbst gemacht | leer |
-| `dinner` | passt fürs Abendbrot | `true` |
-| `mealPrep` | zum Vorkochen fürs Mittag | `false` |
-| `cold` | schmeckt auch kalt | `false` |
-| `diet` | `vegan`, `vegetarisch`, `fleisch` (ältere Angabe `fisch` zählt als `fleisch`) | leer |
-| `meatOptional` | Fleisch kann extra ergänzt werden (nur bei vegan/vegetarisch wirksam) | `false` |
+| `diet` | `vegan` oder `vegetarisch` (ältere Angaben `fleisch`/`fisch` werden zu „leer“) | leer |
+| `quick` | Blitzgericht | `false` |
+| `mealPrep` | fürs Vorkochen geeignet | `false` |
+| `cold` | kaltes Gericht / schmeckt kalt | `false` |
+| `meatOptional` | Fleisch kann extra ergänzt werden | `false` |
 | `favorite`, `tags`, `note`, `link` | Favorit, freie Tags, Notiz, Link zum Originalrezept | leer |
 | `id` | optional; fehlt sie, wird eine UUID erzeugt | – |
 | `photo` | optional, `data:image/jpeg;base64,…` (wird verkleinert) | – |
@@ -136,6 +140,8 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
 - Daten ändern nur über Funktionen in `js/store.js` (sie aktualisieren auch den Export-Zähler).
   „Heute gekocht“/„Machen wir“ zählen bewusst nicht als Änderung für den Export-Hinweis.
 - Lesegerät: alle datenändernden Knöpfe werden über `isMain()` ausgeblendet.
+- Speichern ohne echte Änderung schreibt nichts und zählt nicht für den Export-Hinweis (`saveDish` vergleicht den Inhalt).
+- Filterleiste: Favoriten, Aufwand, Zutaten, Zubereitung, Ernährung, Sonstiges (`OTHER_FILTERS` in `js/search.js`).
 - Gestaltung: Farben als Variablen oben in `app.css` (hell und dunkel). Glas-Effekt über die Klasse `glass`.
 - Statusleiste: bewusst `default` (nicht `black-translucent`). Mit durchscheinender Statusleiste zeichnet iOS
   (getestet iOS 27, iPhone mit Dynamic Island) die unteren ca. 60 pt nicht – unten entsteht ein leerer Streifen,

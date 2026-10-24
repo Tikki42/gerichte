@@ -22,7 +22,14 @@ export const EFFORT = {
 export const DIETS = [
   ['vegan', 'Vegan'],
   ['vegetarisch', 'Vegetarisch'],
-  ['fleisch', 'Mit Fleisch'],
+];
+
+// Ja/Nein-Optionen eines Gerichts (Reihenfolge wie im Formular)
+export const OPTIONS = [
+  ['quick', 'Blitzgericht'],
+  ['mealPrep', 'Fürs Vorkochen geeignet'],
+  ['cold', 'Kaltes Gericht'],
+  ['meatOptional', 'Fleisch ergänzbar'],
 ];
 export const DIET_LABEL = Object.fromEntries(DIETS);
 
@@ -155,14 +162,13 @@ export function blankDish() {
     id: uuid(),
     name: '',
     ingredientIds: [],
-    timeMin: null,
     methodIds: [],
     effort: null,
-    dinner: true,
-    mealPrep: false,
-    cold: false,
     diet: null,
-    meatOptional: false, // bei vegetarischen/veganen Gerichten: Fleisch kann extra ergänzt werden
+    quick: false,        // Blitzgericht
+    mealPrep: false,     // fürs Vorkochen geeignet
+    cold: false,         // kaltes Gericht / schmeckt kalt
+    meatOptional: false, // Fleisch kann extra ergänzt werden
     favorite: false,
     tags: [],
     note: '',
@@ -176,8 +182,12 @@ export function blankDish() {
 
 // ---------- Gerichte ändern ----------
 
+// Inhalt zweier Gerichte vergleichen (ohne Änderungszeitpunkt)
+const contentKey = d => JSON.stringify(Object.keys(d).filter(k => k !== 'updatedAt').sort().map(k => [k, d[k]]));
+
 // ingredients: [{ id } | { name }] – unbekannte Namen werden als neue Zutat angelegt.
 // photo: undefined = unverändert, null = entfernen, { full: Blob, thumb: Blob } = neu
+// Ergebnis: { dish, changed } – ohne echte Änderung wird nichts gespeichert und nichts gezählt.
 export async function saveDish(draft, ingredients, photo) {
   const now = nowISO();
   const prev = state.dishes.get(draft.id);
@@ -205,6 +215,9 @@ export async function saveDish(draft, ingredients, photo) {
     createdAt: prev?.createdAt || now,
     updatedAt: now,
   };
+  if (prev && photo === undefined && !newIngs.length && contentKey(prev) === contentKey(dish)) {
+    return { dish: prev, changed: false };
+  }
   let full, thumb;
   if (photo) {
     full = await photo.full.arrayBuffer();
@@ -228,7 +241,7 @@ export async function saveDish(draft, ingredients, photo) {
   if (photo === null) setThumb(dish.id, null);
   else if (photo) setThumb(dish.id, { data: thumb, type: 'image/jpeg' });
   Object.assign(state.meta, meta);
-  return dish;
+  return { dish, changed: true };
 }
 
 async function patchDish(id, fields, countsForExport) {
@@ -273,6 +286,7 @@ export async function deleteDish(id) {
 export async function renameIngredient(id, newName) {
   const name = cleanName(newName);
   if (!name) throw new Error('Der Name darf nicht leer sein.');
+  if (name === state.ingredients.get(id).name) return { ok: true }; // nichts geändert
   const other = findIngredient(name);
   if (other && other.id !== id) return { conflict: other };
   const ing = { ...state.ingredients.get(id), name, updatedAt: nowISO() };

@@ -82,9 +82,9 @@ export async function readJsonFile(file) {
 
 // ---------- Prüfen ----------
 
-// "fisch" aus älteren Dateien zählt als nicht vegetarisch
+// Ältere Angaben ("fleisch", "fisch") werden ohne Fehler zu "keine Angabe"
 const DIET_ALIASES = {
-  fleisch: 'fleisch', 'mit fleisch': 'fleisch', fisch: 'fleisch', vegetarisch: 'vegetarisch', veggie: 'vegetarisch', vegan: 'vegan',
+  vegetarisch: 'vegetarisch', veggie: 'vegetarisch', vegan: 'vegan', fleisch: null, 'mit fleisch': null, fisch: null,
 };
 
 const METHOD_ALIASES = {
@@ -98,20 +98,16 @@ function checkFields(raw, err) {
   const out = {};
   const opt = (v, d) => (v === undefined || v === null ? d : v);
 
-  const t = opt(raw.timeMin, null);
-  if (t !== null && !(Number.isFinite(t) && t >= 0 && t <= 24 * 60)) err('Zeit muss eine Minutenzahl sein');
-  out.timeMin = t === null ? null : Math.round(t);
-
   const e = opt(raw.effort, null);
   if (e !== null && ![1, 2, 3].includes(e)) err('Aufwand muss 1, 2 oder 3 sein');
   out.effort = e;
 
   const dRaw = opt(raw.diet, null);
   const diet = dRaw === null || dRaw === '' ? null : DIET_ALIASES[nameKey(dRaw)];
-  if (diet === undefined) err(`Ernährung „${dRaw}“ unbekannt (erlaubt: vegan, vegetarisch, Fleisch)`);
+  if (diet === undefined) err(`Ernährung „${dRaw}“ unbekannt (erlaubt: vegan, vegetarisch)`);
   out.diet = diet || null;
 
-  for (const [k, def] of [['dinner', true], ['mealPrep', false], ['cold', false], ['meatOptional', false], ['favorite', false]]) {
+  for (const [k, def] of [['quick', false], ['mealPrep', false], ['cold', false], ['meatOptional', false], ['favorite', false]]) {
     const v = opt(raw[k], def);
     if (typeof v !== 'boolean') err(`${k} muss true oder false sein`);
     out[k] = v === true;

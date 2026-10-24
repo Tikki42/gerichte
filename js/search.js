@@ -6,33 +6,39 @@ import { fold, daysSince } from './util.js';
 export const SORTS = {
   longest: 'Am längsten nicht gekocht',
   name: 'Name',
-  time: 'Zeit',
   newest: 'Zuletzt hinzugefügt',
 };
 
-export const TIME_STEPS = [15, 30, 45, 60];
-
 export const filters = {
+  fav: false,
+  effort: [],
   ings: [],          // Zutaten-IDs
   ingMode: 'all',    // 'all' = alle enthalten, 'any' = mindestens eine
-  maxTime: null,
   methods: [],
-  effort: [],
   diets: [],
+  // "Sonstiges": Ja/Nein-Filter, Schlüssel wie die Felder im Gericht
+  quick: false,
   mealPrep: false,
+  meatOptional: false,
   cold: false,
-  meatOpt: false,
-  fav: false,
 };
 
+export const OTHER_FILTERS = [
+  ['quick', 'Blitzgericht'],
+  ['mealPrep', 'Vorkochen'],
+  ['meatOptional', 'Fleisch ergänzbar'],
+  ['cold', 'Schmeckt kalt'],
+];
+
 export function resetFilters() {
-  Object.assign(filters, { ings: [], ingMode: 'all', maxTime: null, methods: [], effort: [], diets: [], mealPrep: false, cold: false, meatOpt: false, fav: false });
+  Object.assign(filters, { fav: false, effort: [], ings: [], ingMode: 'all', methods: [], diets: [] });
+  for (const [k] of OTHER_FILTERS) filters[k] = false;
 }
 
 export function activeFilterCount() {
   const f = filters;
-  return (f.ings.length ? 1 : 0) + (f.maxTime ? 1 : 0) + (f.methods.length ? 1 : 0) + (f.effort.length ? 1 : 0)
-    + (f.diets.length ? 1 : 0) + (f.mealPrep ? 1 : 0) + (f.cold ? 1 : 0) + (f.meatOpt ? 1 : 0) + (f.fav ? 1 : 0);
+  return (f.fav ? 1 : 0) + (f.effort.length ? 1 : 0) + (f.ings.length ? 1 : 0) + (f.methods.length ? 1 : 0)
+    + (f.diets.length ? 1 : 0) + OTHER_FILTERS.filter(([k]) => f[k]).length;
 }
 
 function haystack(d) {
@@ -44,7 +50,6 @@ const byNameCmp = (a, b) => a.name.localeCompare(b.name, 'de', { sensitivity: 'b
 const SORT_FNS = {
   longest: (a, b) => (a.lastCooked || '').localeCompare(b.lastCooked || '') || byNameCmp(a, b),
   name: byNameCmp,
-  time: (a, b) => (a.timeMin ?? 1e9) - (b.timeMin ?? 1e9) || byNameCmp(a, b),
   newest: (a, b) => (b.createdAt || '').localeCompare(a.createdAt || '') || byNameCmp(a, b),
 };
 
@@ -58,10 +63,7 @@ export function query(text, sort = 'longest') {
   const out = [];
   for (const d of state.dishes.values()) {
     if (f.fav && !d.favorite) continue;
-    if (f.mealPrep && !d.mealPrep) continue;
-    if (f.cold && !d.cold) continue;
-    if (f.meatOpt && !(d.meatOptional && d.diet !== 'fleisch')) continue;
-    if (f.maxTime && !(d.timeMin != null && d.timeMin <= f.maxTime)) continue;
+    if (OTHER_FILTERS.some(([k]) => f[k] && !d[k])) continue;
     if (f.methods.length && !f.methods.some(m => d.methodIds.includes(m))) continue;
     if (f.effort.length && !f.effort.includes(d.effort)) continue;
     if (diets.size && !diets.has(d.diet)) continue;

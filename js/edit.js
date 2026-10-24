@@ -1,12 +1,10 @@
 // Gericht anlegen und bearbeiten (nur Hauptgerät).
 
-import { state, blankDish, saveDish, deleteDish, ingName, ingredientUsage, tagUsage, methodList, findDishByName, EFFORT, DIETS } from './store.js';
+import { state, blankDish, saveDish, deleteDish, ingName, ingredientUsage, tagUsage, methodList, findDishByName, EFFORT, DIETS, OPTIONS } from './store.js';
 import { processPhoto } from './photo.js';
 import { esc, $, $$, cleanName, capFirst, nameKey, fold } from './util.js';
 import { openPage, confirmSheet, toast, showError, emitChange } from './ui.js';
 import { icon } from './icons.js';
-
-const TIME_CHOICES = [10, 15, 20, 30, 45, 60, 90];
 
 const switchRow = (flag, label) =>
   `<button type="button" class="switch-row" data-flag="${flag}"><span>${label}</span><span class="switch" aria-hidden="true"></span></button>`;
@@ -37,13 +35,6 @@ export function openEdit(id, { onSaved } = {}) {
       <div id="fIngs"></div>
     </div>
     <div class="field">
-      <div class="label">Zeit gesamt</div>
-      <div class="chips" id="fTimeChips">${TIME_CHOICES.map(t => `<button type="button" class="chip" data-time="${t}">${t}</button>`).join('')}</div>
-      <div class="input-inline" style="margin-top:8px">
-        <input class="input" id="fTime" type="number" inputmode="numeric" min="0" max="1440" value="${draft.timeMin ?? ''}" placeholder="–"> Minuten
-      </div>
-    </div>
-    <div class="field">
       <div class="label">Zubereitung</div>
       <div class="chips" id="fMethods">${methodList().map(m =>
         `<button type="button" class="chip" data-method="${esc(m.id)}"><span>${esc(m.icon)}</span>${esc(m.name)}</button>`).join('')}</div>
@@ -54,21 +45,16 @@ export function openEdit(id, { onSaved } = {}) {
         `<button type="button" class="option" data-effort="${n}"><b>${n}</b> ${EFFORT[n]}<span class="check">${icon.check(20)}</span></button>`).join('')}</div>
     </div>
     <div class="field">
-      <div class="label">Passt für</div>
-      <div class="switch-list">
-        ${switchRow('dinner', 'Abendbrot')}
-        ${switchRow('mealPrep', 'Vorkochen fürs Mittag')}
-        ${switchRow('cold', 'Schmeckt auch kalt')}
-      </div>
-    </div>
-    <div class="field">
       <div class="label">Ernährung</div>
       <div class="segmented" id="fDiet">${DIETS.map(([v, l]) => `<button type="button" data-diet="${v}">${l}</button>`).join('')}</div>
-      <div class="switch-list" style="margin-top:10px">${switchRow('meatOptional', 'Fleisch ergänzbar')}</div>
-      <p class="hint">Z. B. Hähnchen extra dazu machen. Nur bei vegetarischen und veganen Gerichten.</p>
     </div>
     <div class="field">
-      <div class="switch-list">${switchRow('favorite', '★ Favorit')}</div>
+      <div class="label">Optionen</div>
+      <div class="switch-list">
+        ${OPTIONS.map(([k, l]) => switchRow(k, l)).join('')}
+        ${switchRow('favorite', '★ Favorit')}
+      </div>
+      <p class="hint">„Fleisch ergänzbar“: z. B. Hähnchen extra dazu machen.</p>
     </div>
     <div class="field">
       <div class="label">Foto</div>
@@ -116,12 +102,10 @@ export function openEdit(id, { onSaved } = {}) {
 
   // Zustand der Auswahl-Knöpfe sichtbar machen
   const sync = () => {
-    $$('[data-time]', page.el).forEach(b => b.classList.toggle('on', Number($('#fTime', page.el).value) === Number(b.dataset.time)));
     $$('[data-method]', page.el).forEach(b => b.classList.toggle('on', draft.methodIds.includes(b.dataset.method)));
     $$('[data-effort]', page.el).forEach(b => b.classList.toggle('on', draft.effort === Number(b.dataset.effort)));
     $$('[data-flag]', page.el).forEach(b => b.classList.toggle('on', !!draft[b.dataset.flag]));
     $$('[data-diet]', page.el).forEach(b => b.classList.toggle('on', draft.diet === b.dataset.diet));
-    $('[data-flag="meatOptional"]', page.el).disabled = draft.diet === 'fleisch';
     const url = photo === null ? null : photo?.url || state.thumbs.get(draft.id);
     $('#fPhotoPrev', page.el).innerHTML = url ? `<img class="thumb" src="${url}" alt="">` : `<div class="thumb">${icon.camera(30)}</div>`;
     $('#fPhotoDel', page.el).hidden = !url;
@@ -132,8 +116,7 @@ export function openEdit(id, { onSaved } = {}) {
     const b = e.target.closest('button');
     if (!b) return;
     const d = b.dataset;
-    if (d.time) $('#fTime', page.el).value = $('#fTime', page.el).value === d.time ? '' : d.time;
-    else if (d.method) draft.methodIds = draft.methodIds.includes(d.method) ? draft.methodIds.filter(x => x !== d.method) : [...draft.methodIds, d.method];
+    if (d.method) draft.methodIds = draft.methodIds.includes(d.method) ? draft.methodIds.filter(x => x !== d.method) : [...draft.methodIds, d.method];
     else if (d.effort) draft.effort = draft.effort === Number(d.effort) ? null : Number(d.effort);
     else if (d.flag) draft[d.flag] = !draft[d.flag];
     else if (d.diet) draft.diet = draft.diet === d.diet ? null : d.diet;
@@ -176,26 +159,22 @@ export function openEdit(id, { onSaved } = {}) {
     }
     const dup = findDishByName(name, draft.id);
     if (dup && !(await confirmSheet({ title: 'Name schon vergeben', text: `Es gibt schon „${esc(dup.name)}“. Trotzdem speichern?`, ok: 'Trotzdem speichern' }))) return;
-    const t = $('#fTime', page.el).value.trim();
-    const n = Math.round(Number(t));
     let link = $('#fLink', page.el).value.trim();
     if (link && !/^https?:\/\//i.test(link)) link = 'https://' + link;
     Object.assign(draft, {
       name,
-      timeMin: t === '' || !Number.isFinite(n) || n < 0 ? null : n,
       note: $('#fNote', page.el).value.trim(),
       link,
       tags: tags.map(x => x.name),
     });
-    if (draft.diet === 'fleisch') draft.meatOptional = false;
     const btn = $('#fSave', page.el);
     btn.disabled = true;
     try {
-      const saved = await saveDish(draft, ings, photo === undefined ? undefined : photo && { full: photo.full, thumb: photo.thumb });
+      const { dish: saved, changed } = await saveDish(draft, ings, photo === undefined ? undefined : photo && { full: photo.full, thumb: photo.thumb });
       dirty = false;
       page.close();
-      emitChange();
-      toast(isNew ? `„${saved.name}“ gespeichert.` : 'Änderungen gespeichert.');
+      if (changed) emitChange();
+      toast(isNew ? `„${saved.name}“ gespeichert.` : changed ? 'Änderungen gespeichert.' : 'Keine Änderungen.');
       onSaved?.(saved);
     } catch (err) {
       btn.disabled = false;

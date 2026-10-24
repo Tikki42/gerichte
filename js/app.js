@@ -1,7 +1,7 @@
 // Einstieg: Start, Startseite mit Suche/Filtern/Liste und "Was essen wir heute?".
 
 import { state, load, isMain, setMeta, ingName, methodList, ingredientUsage, markCooked, photoUrl, DIETS, DIET_LABEL, EFFORT } from './store.js';
-import { filters, resetFilters, activeFilterCount, query, pickRandom, SORTS, TIME_STEPS } from './search.js';
+import { filters, resetFilters, activeFilterCount, query, pickRandom, SORTS, OTHER_FILTERS } from './search.js';
 import { esc, $, fmtShort, relDays, lsGet, lsSet, isStandalone, fold, plural } from './util.js';
 import { openSheet, toast, showError, emitChange } from './ui.js';
 import { icon } from './icons.js';
@@ -13,6 +13,7 @@ import { openSettings, openImport } from './settings.js';
 const app = document.getElementById('app');
 let searchText = '';
 let sort = lsGet('sort', 'longest');
+if (!SORTS[sort]) sort = 'longest'; // z. B. frühere Sortierung "Zeit"
 let results = [];
 
 boot();
@@ -170,35 +171,30 @@ function chip(key, label, on) {
 
 function renderFilters() {
   const f = filters;
-  const methods = methodList();
   const one = (arr, fn, base) => (arr.length === 1 ? fn(arr[0]) : arr.length ? `${base} (${arr.length})` : base);
+  const others = OTHER_FILTERS.filter(([k]) => f[k]);
+  // Reihenfolge: Favoriten, Aufwand, Zutaten, Zubereitung, Ernährung, Sonstiges
   $('#filterbar').innerHTML = [
-    chip('ings', `${f.ings.length ? `Zutaten (${f.ings.length})` : 'Zutaten'} ▾`, f.ings.length),
-    chip('time', `${f.maxTime ? `bis ${f.maxTime} min` : 'Zeit'} ▾`, f.maxTime),
-    chip('mealPrep', 'Vorkochen', f.mealPrep),
     chip('fav', '★ Favoriten', f.fav),
-    chip('methods', `${one(f.methods, id => esc(state.methods.get(id)?.name || '?'), 'Zubereitung')} ▾`, f.methods.length),
     chip('effort', `${f.effort.length ? `Aufwand ${[...f.effort].sort().join('+')}` : 'Aufwand'} ▾`, f.effort.length),
+    chip('ings', `${f.ings.length ? `Zutaten (${f.ings.length})` : 'Zutaten'} ▾`, f.ings.length),
+    chip('methods', `${one(f.methods, id => esc(state.methods.get(id)?.name || '?'), 'Zubereitung')} ▾`, f.methods.length),
     chip('diets', `${one(f.diets, d => DIET_LABEL[d], 'Ernährung')} ▾`, f.diets.length),
-    chip('meatOpt', 'Fleisch ergänzbar', f.meatOpt),
-    chip('cold', 'Schmeckt kalt', f.cold),
+    chip('other', `${others.length === 1 ? others[0][1] : others.length ? `Sonstiges (${others.length})` : 'Sonstiges'} ▾`, others.length),
   ].join('');
 
   // Aktive Filter als einzeln entfernbare Pillen + "Alle zurücksetzen"
   const pills = [];
   const pill = (attr, label) => pills.push(`<button class="chip small on" ${attr}>${label} <span class="x">×</span></button>`);
+  if (f.fav) pill('data-rm="fav"', '★ Favoriten');
+  for (const e of f.effort) pill(`data-rm-effort="${e}"`, `Aufwand ${e}`);
   for (const id of f.ings) pill(`data-rm-ing="${esc(id)}"`, esc(ingName(id)));
   if (f.ings.length > 1) {
     pills.push(`<button class="chip small" data-toggle-mode>${f.ingMode === 'all' ? 'alle enthalten' : 'mindestens eine'} ⇄</button>`);
   }
-  if (f.maxTime) pill('data-rm="maxTime"', `bis ${f.maxTime} min`);
-  if (f.mealPrep) pill('data-rm="mealPrep"', 'Vorkochen');
-  if (f.fav) pill('data-rm="fav"', '★ Favoriten');
   for (const id of f.methods) pill(`data-rm-method="${esc(id)}"`, esc(state.methods.get(id)?.name || '?'));
-  for (const e of f.effort) pill(`data-rm-effort="${e}"`, `Aufwand ${e}`);
   for (const d of f.diets) pill(`data-rm-diet="${d}"`, DIET_LABEL[d]);
-  if (f.meatOpt) pill('data-rm="meatOpt"', 'Fleisch ergänzbar');
-  if (f.cold) pill('data-rm="cold"', 'Schmeckt kalt');
+  for (const [k, label] of others) pill(`data-rm="${k}"`, label);
   const row = $('#activeRow');
   row.hidden = !pills.length;
   row.innerHTML = pills.length ? `${pills.join('')}<button class="link-btn" data-reset-all>Alle zurücksetzen</button>` : '';
@@ -215,8 +211,7 @@ function onActivePill(e) {
   if (d.rmMethod) f.methods = f.methods.filter(x => x !== d.rmMethod);
   if (d.rmEffort) f.effort = f.effort.filter(x => x !== Number(d.rmEffort));
   if (d.rmDiet) f.diets = f.diets.filter(x => x !== d.rmDiet);
-  if (d.rm === 'maxTime') f.maxTime = null;
-  if (['mealPrep', 'fav', 'cold', 'meatOpt'].includes(d.rm)) f[d.rm] = false;
+  if (d.rm) f[d.rm] = false; // Favoriten und "Sonstiges"
   refresh();
 }
 
@@ -236,26 +231,43 @@ function refresh() {
 function onFilterChip(e) {
   const key = e.target.closest('[data-f]')?.dataset.f;
   if (!key) return;
-  if (['mealPrep', 'fav', 'cold', 'meatOpt'].includes(key)) {
-    filters[key] = !filters[key];
+  if (key === 'fav') {
+    filters.fav = !filters.fav;
     return refresh();
-  }
-  if (key === 'ings') return openIngredientSheet();
-  if (key === 'time') {
-    return choiceSheet('Maximale Zeit', [{ value: null, label: 'Egal' }, ...TIME_STEPS.map(t => ({ value: t, label: `bis ${t} Minuten` }))],
-      filters.maxTime, v => { filters.maxTime = v; refresh(); });
-  }
-  if (key === 'methods') {
-    return multiSheet('Zubereitung', methodList().map(m => ({ value: m.id, label: `${esc(m.icon)} ${esc(m.name)}` })), 'methods',
-      'Zeigt Gerichte mit mindestens einer der gewählten Zubereitungsarten.');
   }
   if (key === 'effort') {
     return multiSheet('Aufwand', [1, 2, 3].map(n => ({ value: n, label: `${n} · ${EFFORT[n]}` })), 'effort');
   }
-  if (key === 'diets') {
-    return multiSheet('Ernährung', DIETS.map(([v, l]) => ({ value: v, label: l })), 'diets',
-      '„Vegetarisch“ zeigt auch vegane Gerichte. Für Gerichte, zu denen man Fleisch extra machen kann, gibt es den Filter „Fleisch ergänzbar“.');
+  if (key === 'ings') return openIngredientSheet();
+  if (key === 'methods') {
+    return multiSheet('Zubereitung', methodList().map(m => ({ value: m.id, label: `${esc(m.icon)} ${esc(m.name)}` })), 'methods',
+      'Zeigt Gerichte mit mindestens einer der gewählten Zubereitungsarten.');
   }
+  if (key === 'diets') {
+    return multiSheet('Ernährung', DIETS.map(([v, l]) => ({ value: v, label: l })), 'diets', '„Vegetarisch“ zeigt auch vegane Gerichte.');
+  }
+  if (key === 'other') return otherSheet();
+}
+
+// "Sonstiges": Ja/Nein-Filter, wirken sofort; mehrere gewählt = alle müssen zutreffen
+function otherSheet() {
+  const s = openSheet({ title: 'Sonstiges' });
+  const render = () => {
+    s.body.innerHTML = `<div class="option-list">${OTHER_FILTERS.map(([k, l]) =>
+      `<button class="option ${filters[k] ? 'on' : ''}" data-k="${k}">${l}<span class="check">${icon.check(20)}</span></button>`).join('')}</div>
+      <p class="hint">Bei mehreren Optionen werden Gerichte gezeigt, die alle erfüllen.</p>`;
+    s.setFoot(`<button class="btn" data-clear>Leeren</button>${showButton()}`);
+  };
+  s.el.addEventListener('click', e => {
+    const b = e.target.closest('[data-k]');
+    if (b) filters[b.dataset.k] = !filters[b.dataset.k];
+    else if (e.target.closest('[data-clear]')) OTHER_FILTERS.forEach(([k]) => { filters[k] = false; });
+    else if (e.target.closest('[data-done]')) return s.close();
+    else return;
+    refresh();
+    render();
+  });
+  render();
 }
 
 // Ein-Auswahl-Liste, schließt sich nach dem Tippen
@@ -371,7 +383,7 @@ function cardHtml({ dish: d, hits }) {
   const icons = d.methodIds.map(id => state.methods.get(id)?.icon || '').join(' ');
   const meta = [
     filters.ings.length && filters.ingMode === 'any' ? `<span class="hits">${hits} von ${filters.ings.length}</span>` : '',
-    d.timeMin != null ? `<span>${icon.clock(13)} ${d.timeMin} min</span>` : '',
+    d.quick ? `<span class="quick">${icon.bolt(13)} Blitz</span>` : '',
     icons ? `<span>${esc(icons)}</span>` : '',
     `<span>${d.lastCooked ? `zuletzt ${relDays(d.lastCooked)}` : 'noch nie gekocht'}</span>`,
   ].join('');
@@ -425,7 +437,7 @@ function openRandom() {
       ${thumb ? `<img class="pick-photo" id="pickImg" src="${thumb}" alt="">` : ''}
       <div class="pick-name">${esc(d.name)} ${d.favorite ? '<span class="fav">★</span>' : ''}</div>
       <div class="pick-sub">${esc(d.ingredientIds.map(ingName).join(', '))}</div>
-      <p class="pick-sub">${[d.timeMin != null ? `${icon.clock(15)} ${d.timeMin} min` : '', esc(icons)].filter(Boolean).join(' · ')}</p>
+      <p class="pick-sub">${[d.quick ? `<span class="quick">${icon.bolt(15)} Blitzgericht</span>` : '', esc(icons)].filter(Boolean).join(' · ')}</p>
       <p class="pick-sub">${d.lastCooked ? `Zuletzt gekocht ${relDays(d.lastCooked)}` : 'Noch nie gekocht'} ·
         <button class="link-btn" data-open style="padding:0;min-height:0">Details ansehen ›</button></p>
       <p class="hint">Aus ${plural(pool.length, 'Gericht', 'Gerichten')} der aktuellen Auswahl.</p>`;

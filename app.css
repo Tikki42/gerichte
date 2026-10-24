@@ -230,6 +230,7 @@ a { color: var(--tint); }
 .card-ings b { color: var(--text); font-weight: 600; }
 .card-meta { display: flex; gap: 10px; flex-wrap: wrap; color: var(--text-2); font-size: 13px; margin-top: auto; align-items: center; }
 .card-meta span { display: inline-flex; align-items: center; gap: 3px; }
+.quick { color: var(--tint); font-weight: 600; display: inline-flex; align-items: center; gap: 3px; }
 .hits { background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 7px; padding: 1px 7px; font-weight: 600; }
 .fav { color: var(--star); }
 

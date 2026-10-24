@@ -1,6 +1,6 @@
 // Detailansicht eines Gerichts.
 
-import { state, isMain, ingName, photoUrl, markCooked, setFavorite, EFFORT, DIET_LABEL } from './store.js';
+import { state, isMain, ingName, photoUrl, markCooked, setFavorite, EFFORT, DIET_LABEL, OPTIONS } from './store.js';
 import { esc, $, fmtDate, relDays, todayYMD } from './util.js';
 import { openPage, toast, showError, emitChange } from './ui.js';
 import { openEdit } from './edit.js';
@@ -24,14 +24,13 @@ export function openDetail(id) {
     if (!d) return page.close();
     const main = isMain();
     const methods = d.methodIds.map(m => state.methods.get(m)).filter(Boolean);
-    const suits = [d.dinner && 'Abendbrot', d.mealPrep && 'Vorkochen fürs Mittag'].filter(Boolean).join(', ');
+    const options = OPTIONS.filter(([k]) => d[k]).map(([, l]) => l);
     const link = /^https?:\/\//i.test(d.link || '') ? d.link : '';
     const rows = [
-      ['Zeit', d.timeMin != null ? `${d.timeMin} Minuten` : '–'],
       ['Zubereitung', methods.length ? methods.map(m => `${esc(m.icon)} ${esc(m.name)}`).join('<br>') : '–'],
       ['Aufwand', d.effort ? `${d.effort} · ${EFFORT[d.effort]}` : '–'],
-      ['Passt für', (esc(suits) || '–') + (d.cold ? '<br>schmeckt auch kalt' : '')],
-      ['Ernährung', (d.diet ? DIET_LABEL[d.diet] : '–') + (d.meatOptional && d.diet !== 'fleisch' ? '<br>Fleisch ergänzbar' : '')],
+      ['Ernährung', DIET_LABEL[d.diet] || '–'],
+      ['Optionen', options.length ? options.join('<br>') : '–'],
       ['Gekocht', d.lastCooked
         ? `zuletzt ${relDays(d.lastCooked)} (${fmtDate(d.lastCooked)})<br>insgesamt ${d.cookCount || 0}×`
         : 'noch nie'],

@@ -1,7 +1,7 @@
 // Service Worker: hält alle App-Dateien offline vor.
 // WICHTIG: Bei jeder Änderung an der App VERSION erhöhen – sonst bekommen die iPhones das Update nicht.
 
-const VERSION = '1.1.1';
+const VERSION = '1.2.0';
 const CACHE = `gerichte-${VERSION}`;
 
 const FILES = [
