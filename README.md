@@ -243,6 +243,10 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
 - „Bewegung reduzieren“: Seiten, Fenster und Liste blenden nur über (`reduceMotion()` in `js/motion.js`).
 - iPad/breite Fenster: ab 700 pt Breite Karten in 2 Spalten, ab 1000 pt in 3; Unterseiten mittig in 680 pt Breite,
   Fenster von unten mittig (ab 600 pt Höhe). Alles in `@media`-Regeln am Ende von `app.css`, darunter bleibt alles wie bisher.
+- iPad als installierte App (seit 2.0.1): iPadOS 26+ blendet Inhalte unter der Statusleiste weich aus und lässt sie
+  verschwimmen (gemessen bis etwa 32 pt unter dem sicheren Bereich, iPadOS 27.2). `js/app.js` setzt dort die Klasse
+  `ipad-app`, `app.css` vergrößert damit `--safe-top` um 28 pt – Kopfzeilen, Startseite und Hinweise rücken tiefer.
+  Auf dem iPhone beginnt die App unter der Statusleiste („default“), dort gibt es den Effekt nicht.
 - Testen im eingebauten Browser: Ist der Browser-Bereich verborgen, laufen Animationen nicht weiter – vorher
   `document.getAnimations().forEach(a => a.finish())`. Das Wischen lässt sich mit `TouchEvent`s und
   `Object.defineProperty(navigator, 'standalone', { value: true, configurable: true })` prüfen (installierte

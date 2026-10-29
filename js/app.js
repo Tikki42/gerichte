@@ -24,6 +24,9 @@ let lastState = null; // letzter Zustand des Abgleichs (für einmalige Hinweise)
 boot();
 
 async function boot() {
+  // iPad als installierte App: Kopfzeilen rücken unter die weiche Ausblendung der Statusleiste (siehe app.css)
+  const iPad = /iPad/.test(navigator.userAgent) || (/Macintosh/.test(navigator.userAgent) && navigator.maxTouchPoints > 1);
+  if (iPad && navigator.standalone === true) document.documentElement.classList.add('ipad-app');
   // Kein Zoomen mit zwei Fingern, wie in einer echten App (Doppeltipp-Zoom ist per CSS abgeschaltet)
   for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, e => e.preventDefault(), { passive: false });
   try {

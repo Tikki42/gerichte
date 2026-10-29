@@ -68,6 +68,11 @@
   }
 }
 
+/* iPad als installierte App (iPadOS 26+): Das System blendet Inhalte unter der Statusleiste weich aus und lässt sie
+   verschwimmen, gemessen bis etwa 32 pt unter dem sicheren Bereich (iPadOS 27.2). Alles, was sich oben am sicheren
+   Bereich ausrichtet, rückt dort deshalb tiefer. Die Klasse setzt js/app.js, auf dem iPhone bleibt alles wie bisher. */
+:root.ipad-app { --safe-top: calc(env(safe-area-inset-top, 0px) + 28px); }
+
 /* manipulation: Wischen und Scrollen ja, aber kein Zoomen per Doppeltippen (auch auf freien Flächen) */
 * { box-sizing: border-box; touch-action: manipulation; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
