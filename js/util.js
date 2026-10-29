@@ -40,6 +40,16 @@ function parseYMD(s) {
   return new Date(y, m - 1, d);
 }
 
+// Tag um n Tage verschieben (negativ = zurück), Ergebnis "JJJJ-MM-TT"
+export function addDaysYMD(dateYMD, n) {
+  const d = parseYMD(dateYMD);
+  d.setDate(d.getDate() + n);
+  return ymd(d);
+}
+
+const WEEKDAYS = ['So', 'Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa'];
+export const weekdayShort = dateYMD => WEEKDAYS[parseYMD(dateYMD).getDay()];
+
 export function daysSince(dateYMD) {
   if (!dateYMD) return null;
   const now = new Date();

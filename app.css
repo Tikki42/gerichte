@@ -68,7 +68,8 @@
   }
 }
 
-* { box-sizing: border-box; }
+/* manipulation: Wischen und Scrollen ja, aber kein Zoomen per Doppeltippen (auch auf freien Flächen) */
+* { box-sizing: border-box; touch-action: manipulation; }
 html, body { height: 100%; margin: 0; overflow: hidden; }
 body {
   background: var(--bg);
@@ -182,7 +183,7 @@ a { color: var(--tint); }
   box-shadow: var(--glass-shadow);
 }
 .bottombar .btn { padding: 0 12px; gap: 6px; font-size: 16px; white-space: nowrap; letter-spacing: -.1px; }
-@media (max-width: 379px) { .bottombar .btn .ico { display: none; } }
+@media (max-width: 379px) { .bottombar .btn .ico, .page-foot .btn:not(.icon-btn) .ico { display: none; } }
 
 /* Punkt am Einstellungs-Knopf: Änderungen noch nicht exportiert */
 .badge-dot { position: relative; }
@@ -210,6 +211,7 @@ a { color: var(--tint); }
 .btn.big { min-height: 54px; border-radius: 27px; }
 .btn.grow { flex: 1; }
 .btn.full { width: 100%; }
+.btn.icon-btn { flex: none; width: 54px; padding: 0; }
 .btn:disabled { opacity: .45; transform: none; }
 .btn-row { display: flex; gap: 10px; }
 .btn-col { display: flex; flex-direction: column; gap: 10px; }
@@ -349,6 +351,25 @@ a { color: var(--tint); }
 .ing-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 12px; }
 .ing-chip { background: var(--accent-soft); color: var(--accent-soft-text); border-radius: 999px; padding: 7px 14px; font-size: 16px; font-weight: 600; }
 
+/* Kochtage */
+.cook-head { margin: 0 4px 7px; font-size: 13px; font-weight: 400; color: var(--text-2); text-transform: uppercase; letter-spacing: .04em; }
+.cook-row { padding-right: 10px; }
+.cook-row .when { margin-left: auto; color: var(--text-2); font-size: 15px; }
+.more-days { margin: 4px 0 0; }
+.day-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.day-chip {
+  min-height: 62px; border-radius: 16px; border: 0; background: var(--surface); color: var(--text); padding: 6px 4px;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; font-size: 16px; font-weight: 600;
+  box-shadow: 0 0 0 .5px var(--separator), var(--card-shadow);
+}
+.day-chip small { display: inline-flex; align-items: center; gap: 3px; font-size: 13px; font-weight: 500; color: var(--text-2); }
+.day-chip.on { background: var(--accent); color: var(--accent-on); box-shadow: 0 2px 8px var(--accent-shadow); }
+.day-chip.on small { color: inherit; opacity: .85; }
+.day-chip:disabled { opacity: .55; }
+.day-extra { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.day-extra:empty { display: none; }
+.date-btn { margin-top: 12px; }
+
 /* ---------- Formular ---------- */
 
 .field { margin-bottom: 22px; }
@@ -430,6 +451,8 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.4; }
   box-shadow: 0 6px 20px rgba(0, 0, 0, .25); animation: up .22s ease-out;
 }
 .toast span { flex: 1; }
+/* Ist ein Fenster von unten offen, erscheinen Hinweise oben, damit sie keine Knöpfe verdecken */
+body:has(#overlays .backdrop) #toasts { bottom: auto; top: calc(var(--safe-top) + 12px); }
 .toast button { border: 0; background: none; color: #6fe0a0; font-weight: 700; font-size: 15px; min-height: 36px; padding: 0 4px; }
 .update-bar {
   position: fixed; left: 12px; right: 12px; top: calc(var(--safe-top) + 8px); z-index: 70; border-radius: 26px;

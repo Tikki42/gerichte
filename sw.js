@@ -1,7 +1,7 @@
 // Service Worker: hält alle App-Dateien offline vor.
 // WICHTIG: Bei jeder Änderung an der App VERSION erhöhen – sonst bekommen die iPhones das Update nicht.
 
-const VERSION = '1.4.0';
+const VERSION = '1.5.0';
 const CACHE = `gerichte-${VERSION}`;
 
 const FILES = [
@@ -13,6 +13,7 @@ const FILES = [
   'icons/icon-512.png',
   'icons/apple-touch-icon.png',
   'js/app.js',
+  'js/cook.js',
   'js/db.js',
   'js/detail.js',
   'js/edit.js',

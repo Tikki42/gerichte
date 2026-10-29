@@ -15,7 +15,8 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 | `sw.js` | Service Worker: Offline-Betrieb, **enthält die Versionsnummer** |
 | `icons/` | App-Icons (PNG) und ihre Vorlage `icon-source.svg` |
 | `js/app.js` | Start, Startseite (Suche, Filter, Liste), „Was essen wir heute?“ |
-| `js/detail.js` | Detailansicht eines Gerichts |
+| `js/detail.js` | Detailansicht eines Gerichts (mit Liste „Gekocht am“) |
+| `js/cook.js` | Fenster „Früher gekocht“: vergangene Kochtage nachtragen |
 | `js/edit.js` | Anlegen/Bearbeiten (Zutaten- und Tag-Eingabe mit Vorschlägen) |
 | `js/settings.js` | Einstellungen, Export (zweistufig), Import, „Gerichte hinzufügen“ |
 | `js/manage.js` | Zutaten umbenennen/zusammenführen, Zubereitungsarten pflegen |
@@ -34,6 +35,9 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 - `ingredients` – gemeinsame Zutatenliste `{ id, name }`; Gerichte verweisen per ID darauf
 - `methods` – Zubereitungsarten `{ id, name, icon, order }` (erweiterbar)
 - `photos`, `thumbs` – Foto und Vorschaubild je Gericht (Schlüssel = Gericht-ID, als ArrayBuffer)
+- `cooks` – ein Eintrag je Gericht und Kochtag `{ id: "Gericht-ID|JJJJ-MM-TT", dishId, day, deleted, ts }`
+  (seit 1.5.0, `DB_VERSION` 2). Gelöschte Tage bleiben mit `deleted: true` stehen, damit ein späterer Abgleich
+  sie zusammenführen kann.
 - `meta` – Gerätetyp, Datenstand, letzter Export, Zähler „Änderungen seit Export“, letzter Import
 
 Gericht:
@@ -41,14 +45,15 @@ Gericht:
 ```
 id, name, ingredientIds[], methodIds[], effort (1|2|3), diet ("vegan"|"vegetarisch"|null),
 quick (Blitzgericht), mealPrep (fürs Vorkochen), cold (kaltes Gericht), meatOptional (Fleisch ergänzbar),
-favorite, tags[], note, link, lastCooked ("JJJJ-MM-TT"), cookCount, createdAt, updatedAt
+favorite, tags[], note, link, lastCooked ("JJJJ-MM-TT"), cookCount, cookCountBase, createdAt, updatedAt
 ```
+
+`lastCooked` und `cookCount` werden aus `cooks` abgeleitet (neuester Kochtag; `cookCountBase` + Zahl der Kochtage).
+`cookCountBase` zählt frühere Male ohne Datum aus der Zeit vor 1.5.0: Beim Umstieg wurde der bisherige letzte
+Kochtag der erste Eintrag, die Gesamtzahl blieb gleich.
 
 Frühere Felder `timeMin` (Zeit) und `dinner` (Abendbrot) werden nicht mehr verwendet; stehen sie noch in
 alten Einträgen oder Dateien, bleiben sie einfach unbeachtet erhalten.
-
-```
-```
 
 Unbekannte Zusatzfelder bleiben bei Export und Import erhalten. Spätere Funktionen
 (Mengen, Kochschritte, Nährwerte, Einkaufsliste, Wochenplan) können als neue Felder bzw.
@@ -109,6 +114,9 @@ Eine komplette Exportdatei funktioniert ebenfalls als Quelle für „Gerichte hi
 
 `Gerichte-JJJJ-MM-TT.json` mit `"kind": "backup"`, Exportzeitpunkt (`exportedAt`), Zutaten- und
 Zubereitungslisten mit IDs und allen Gerichten inklusive Foto und Vorschaubild als Base64.
+Ab `formatVersion` 2 (App 1.5.0) enthält sie zusätzlich die Liste `cooks` mit allen Kochtagen. Ältere Dateien
+ohne `cooks` werden beim Import umgerechnet (letzter Kochtag = erster Eintrag). Ältere App-Versionen lehnen
+Dateien mit `formatVersion` 2 ab – vor dem Datei-Austausch beide Geräte aktualisieren.
 Der Import prüft die ganze Datei, bevor etwas geändert wird, und ersetzt dann alles in einer einzigen
 Transaktion – bei einem Fehler bleibt der alte Stand erhalten.
 
@@ -122,7 +130,14 @@ Transaktion – bei einem Fehler bleibt der alte Stand erhalten.
 4. Nach ca. 1–2 Minuten ist die neue Version online. Beim nächsten Öffnen der App erscheint oben
    „Neue Version verfügbar“ → „Neu laden“. Die Daten bleiben dabei erhalten.
 
-Nicht hochladen: den Ordner `.claude/` (nur für lokale Tests) und den Ordner `vorlagen/` (Excel-Vorlage zum Erfassen der Gerichte; Claude wandelt sie in eine Datei für „Gerichte hinzufügen“ um).
+**Seit 29.10.2026 veröffentlicht Claude direkt per Git.** Der Projektordner ist ein Git-Repository
+(`origin` = `tikki42/gerichte`; Abruf über HTTPS, Push über SSH). Für den Push gibt es einen Deploy Key, der nur
+für dieses Repository gilt (`~/.ssh/gerichte_deploy`, auf GitHub unter Settings → Deploy keys, mit Schreibzugriff).
+`planung/`, `vorlagen/`, `.claude/` und `.DS_Store` sind über `.git/info/exclude` ausgeschlossen.
+Ablauf: Version in `sw.js` erhöhen → testen → `git add -A` → `git commit` → `git push origin main`.
+Wurde zwischendurch über die Weboberfläche hochgeladen, vorher `git pull` (bzw. `git fetch` und prüfen).
+
+Nicht hochladen: den Ordner `.claude/` (nur für lokale Tests), den Ordner `vorlagen/` (Excel-Vorlage zum Erfassen der Gerichte; Claude wandelt sie in eine Datei für „Gerichte hinzufügen“ um) und den Ordner `planung/` (Entwurf und Umsetzungsplan für Version 2.0).
 
 ## App-Icon ändern
 
@@ -152,7 +167,13 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
 - Keine Frameworks, keine Build-Tools; ES-Module direkt im Browser.
 - Neue JS-Dateien in die Liste `FILES` in `sw.js` eintragen.
 - Daten ändern nur über Funktionen in `js/store.js` (sie aktualisieren auch den Export-Zähler).
-  „Heute gekocht“/„Machen wir“ zählen bewusst nicht als Änderung für den Export-Hinweis.
+  „Heute gekocht“/„Machen wir“ und nachgetragene Kochtage zählen bewusst nicht als Änderung für den Export-Hinweis.
+- Kochtage nur über `addCookDays`, `removeCookDays` und `markCooked` in `js/store.js` ändern; sie halten
+  `lastCooked` und `cookCount` passend.
+- Zoom: `touch-action: manipulation` auf allen Elementen verhindert das Zoomen per Doppeltippen,
+  `gesturestart`/`gesturechange` werden abgefangen (kein Zwei-Finger-Zoom).
+- Detailseite: „Bearbeiten“ steht oben rechts (`page.setRight` in `js/ui.js`), unten „Heute gekocht“ und der Kalender-Knopf.
+- Ist ein Fenster von unten offen, erscheinen Hinweise (Toasts) oben, damit sie keine Knöpfe verdecken.
 - Lesegerät: alle datenändernden Knöpfe werden über `isMain()` ausgeblendet.
 - Speichern ohne echte Änderung schreibt nichts und zählt nicht für den Export-Hinweis (`saveDish` vergleicht den Inhalt).
 - Filterleiste: Favoriten, Aufwand, Zutaten, Zubereitung, Ernährung, Sonstiges (`OTHER_FILTERS` in `js/search.js`).

@@ -2,12 +2,12 @@
 // Dateiformat: siehe README.md
 
 import * as db from './db.js';
-import { state, replaceAll, addAll, methodList } from './store.js';
+import { state, replaceAll, addAll, methodList, cookKey } from './store.js';
 import { makeThumb, processPhoto } from './photo.js';
 import { nowISO, ymd, uuid, cleanName, capFirst, nameKey, isYMD, bufToBase64, dataUrlToBuf, byName } from './util.js';
 
 export const FORMAT = 'gerichte-app';
-export const FORMAT_VERSION = 1;
+export const FORMAT_VERSION = 2; // 2 = mit Kochtagen ("cooks", seit 1.5.0)
 
 export class ImportError extends Error {
   constructor(message, details = []) {
@@ -22,7 +22,7 @@ const toDataUrl = rec => `data:${rec.type || 'image/jpeg'};base64,${bufToBase64(
 
 export async function buildExport() {
   const exportedAt = nowISO();
-  const [photos, thumbs] = await Promise.all([db.getAll('photos'), db.getAll('thumbs')]);
+  const [photos, thumbs, cooks] = await Promise.all([db.getAll('photos'), db.getAll('thumbs'), db.getAll('cooks')]);
   const photoMap = new Map(photos.map(p => [p.id, p]));
   const thumbMap = new Map(thumbs.map(t => [t.id, t]));
   const dishes = [...state.dishes.values()].sort(byName);
@@ -36,6 +36,7 @@ export async function buildExport() {
     counts: { dishes: dishes.length, photos: dishes.filter(d => photoMap.has(d.id)).length },
     methods: methodList(),
     ingredients: [...state.ingredients.values()].sort(byName),
+    cooks: cooks.sort((a, b) => a.id.localeCompare(b.id)),
   };
   // Stückweise zusammensetzen, damit keine riesige Zeichenkette entsteht
   const parts = [JSON.stringify(head).slice(0, -1), ',\n"dishes":[\n'];
@@ -130,6 +131,11 @@ function checkFields(raw, err) {
   const cc = opt(raw.cookCount, 0);
   if (!(Number.isInteger(cc) && cc >= 0)) err('cookCount muss eine ganze Zahl sein');
   out.cookCount = Number.isInteger(cc) && cc >= 0 ? cc : 0;
+
+  // Frühere Male ohne Datum (ab formatVersion 2). Fehlt die Angabe, wird sie aus cookCount abgeleitet.
+  const cb = opt(raw.cookCountBase, null);
+  if (cb !== null && !(Number.isInteger(cb) && cb >= 0)) err('cookCountBase muss eine ganze Zahl sein');
+  out.cookCountBase = Number.isInteger(cb) && cb >= 0 ? cb : null;
   return out;
 }
 
@@ -179,6 +185,41 @@ function failIfErrors(errors, intro) {
 
 const isNonEmptyString = v => typeof v === 'string' && v.trim() !== '';
 
+// Kochtage aus der Datei (ab formatVersion 2): Map Gericht-ID -> Map(Tag -> { day, deleted, ts }).
+// Ältere Dateien haben keine Kochtage: Ergebnis null.
+function readCooks(json, errors, fallbackTs) {
+  if (json.cooks === undefined) return null;
+  const byDish = new Map();
+  if (!Array.isArray(json.cooks)) {
+    errors.push('Die Kochtage müssen eine Liste sein');
+    return byDish;
+  }
+  json.cooks.forEach((r, i) => {
+    if (!r || !isNonEmptyString(r.dishId) || !isYMD(r.day)) return errors.push(`Kochtag ${i + 1}: Gericht oder Datum fehlt`);
+    const rec = { day: r.day, deleted: r.deleted === true, ts: typeof r.ts === 'string' ? r.ts : fallbackTs };
+    if (!byDish.has(r.dishId)) byDish.set(r.dishId, new Map());
+    const days = byDish.get(r.dishId);
+    if (!days.has(r.day) || rec.ts > days.get(r.day).ts) days.set(r.day, rec);
+  });
+  return byDish;
+}
+
+// Kochtage eines Gerichts für den Import: aus der Datei oder – bei älteren Dateien – aus lastCooked/cookCount.
+// Ergebnis: die Einträge und die dazu passenden Felder cookCountBase, lastCooked und cookCount.
+function cooksFor(id, fields, fileCooks, ts) {
+  let cooks;
+  let base;
+  if (fileCooks) {
+    cooks = [...(fileCooks.get(id)?.values() || [])].map(c => ({ id: cookKey(id, c.day), dishId: id, ...c }));
+    base = fields.cookCountBase ?? Math.max(0, fields.cookCount - cooks.filter(c => !c.deleted).length);
+  } else {
+    cooks = fields.lastCooked ? [{ id: cookKey(id, fields.lastCooked), dishId: id, day: fields.lastCooked, deleted: false, ts }] : [];
+    base = Math.max(0, fields.cookCount - cooks.length);
+  }
+  const days = cooks.filter(c => !c.deleted).map(c => c.day).sort();
+  return { cooks, fields: { cookCountBase: base, lastCooked: days.length ? days[days.length - 1] : null, cookCount: base + days.length } };
+}
+
 // ---------- Kompletter Stand (ersetzt alles) ----------
 
 export async function prepareReplace(json) {
@@ -188,6 +229,7 @@ export async function prepareReplace(json) {
   const exportedAt = json.exportedAt;
   if (typeof exportedAt !== 'string' || isNaN(Date.parse(exportedAt))) throw new ImportError('In der Datei fehlt das Exportdatum.');
   const errors = [];
+  const fileCooks = readCooks(json, errors, exportedAt);
 
   const ingredients = [];
   const ingIds = new Set();
@@ -215,6 +257,7 @@ export async function prepareReplace(json) {
   const dishes = [];
   const photos = [];
   const thumbs = [];
+  const cooks = [];
   const dishIds = new Set();
   for (let i = 0; i < json.dishes.length; i++) {
     const raw = json.dishes[i];
@@ -233,13 +276,16 @@ export async function prepareReplace(json) {
     const fields = checkFields(raw, err);
     dishIds.add(raw.id);
     await decodePhotos(raw, raw.id, err, photos, thumbs);
-    const rec = { ...raw, ...fields, name: cleanName(raw.name), ingredientIds: iIds || [], methodIds: mIds || [] };
+    const cf = cooksFor(raw.id, fields, fileCooks, exportedAt);
+    cooks.push(...cf.cooks);
+    const rec = { ...raw, ...fields, ...cf.fields, name: cleanName(raw.name), ingredientIds: iIds || [], methodIds: mIds || [] };
     delete rec.photo;
     delete rec.thumb;
     rec.createdAt = typeof raw.createdAt === 'string' ? raw.createdAt : exportedAt;
     rec.updatedAt = typeof raw.updatedAt === 'string' ? raw.updatedAt : exportedAt;
     dishes.push(rec);
   }
+  if (fileCooks && [...fileCooks.keys()].some(id => !dishIds.has(id))) errors.push('Kochtage verweisen auf ein unbekanntes Gericht');
   failIfErrors(errors, 'Die Datei ist fehlerhaft. Es wurde nichts geändert.');
 
   const localStand = state.meta.dataStand;
@@ -248,7 +294,7 @@ export async function prepareReplace(json) {
     dishCount: dishes.length,
     photoCount: photos.length,
     older: !!localStand && state.dishes.size > 0 && Date.parse(exportedAt) < Date.parse(localStand),
-    data: { dishes, ingredients, methods, photos, thumbs },
+    data: { dishes, ingredients, methods, photos, thumbs, cooks },
   };
 }
 
@@ -266,6 +312,7 @@ export async function prepareAdd(json) {
   if (json.kind !== 'dishes' && json.kind !== 'backup') throw new ImportError('Unbekannte Dateiart.');
   const errors = [];
   const now = nowISO();
+  const fileCooks = readCooks(json, errors, now);
 
   // Bei einer Backup-Datei werden IDs über die Listen in der Datei in Namen übersetzt
   const fileIng = new Map((json.ingredients || []).filter(Boolean).map(i => [i.id, i.name]));
@@ -318,6 +365,7 @@ export async function prepareAdd(json) {
   const dishes = [];
   const photos = [];
   const thumbs = [];
+  const cooks = [];
   for (const a of accepted) {
     const ingredientIds = [];
     for (const n of a.ingNames) {
@@ -347,7 +395,9 @@ export async function prepareAdd(json) {
     const id = isNonEmptyString(a.raw.id) ? a.raw.id : uuid();
     const err = m => errors.push(`„${a.name}“: ${m}`);
     await decodePhotos(a.raw, id, err, photos, thumbs, true);
-    const rec = { ...a.raw, ...a.fields, id, name: a.name, ingredientIds, methodIds, createdAt: now, updatedAt: now };
+    const cf = cooksFor(id, a.fields, fileCooks, now);
+    cooks.push(...cf.cooks);
+    const rec = { ...a.raw, ...a.fields, ...cf.fields, id, name: a.name, ingredientIds, methodIds, createdAt: now, updatedAt: now };
     for (const k of ['photo', 'thumb', 'ingredients', 'methods']) delete rec[k];
     dishes.push(rec);
   }
@@ -358,7 +408,7 @@ export async function prepareAdd(json) {
     skipped,
     newIngredients,
     newMethods,
-    data: { dishes, ingredients: newIngredients, methods: newMethods, photos, thumbs },
+    data: { dishes, ingredients: newIngredients, methods: newMethods, photos, thumbs, cooks },
   };
 }
 

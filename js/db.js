@@ -2,10 +2,10 @@
 // Fotos werden als ArrayBuffer gespeichert (zuverlässiger als Blobs in älteren iOS-Versionen).
 
 const DB_NAME = 'gerichte';
-const DB_VERSION = 1;
+const DB_VERSION = 2; // 2 = Kochtage als eigene Einträge ("cooks", seit 1.5.0)
 
 // Datenbestände, die ein Import komplett ersetzt. "meta" (Gerätetyp, Exportstand …) bleibt.
-export const DATA_STORES = ['dishes', 'ingredients', 'methods', 'photos', 'thumbs'];
+export const DATA_STORES = ['dishes', 'ingredients', 'methods', 'photos', 'thumbs', 'cooks'];
 
 let dbPromise;
 

@@ -15,6 +15,7 @@ export const icon = {
   bolt: (s) => svg('<path d="M13.5 2.5L5 13.5h6l-1.5 8 8.5-11h-6z" fill="currentColor" stroke="none"/>', s),
   // Hähnchenkeule für "Fleisch ergänzbar"
   meat: (s) => svg('<ellipse cx="14.6" cy="9.4" rx="6.6" ry="5.3" transform="rotate(-45 14.6 9.4)" fill="currentColor" stroke="none"/><path d="M10.6 13.4L6.8 17.2" stroke-width="2.6"/><circle cx="5.3" cy="17.1" r="1.9" fill="currentColor" stroke="none"/><circle cx="6.9" cy="18.7" r="1.9" fill="currentColor" stroke="none"/>', s),
+  calendar: (s) => svg('<rect x="3.5" y="5" width="17" height="15.5" rx="3.5" stroke-width="2"/><path d="M3.5 10h17M8 3v4M16 3v4" stroke-width="2"/>', s),
   clock: (s) => svg('<circle cx="12" cy="12" r="8.5" stroke-width="2"/><path d="M12 7.5V12l3 2" stroke-width="2"/>', s),
   camera: (s) => svg('<path d="M4 8.5A2 2 0 0 1 6 6.5h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" stroke-width="2"/><circle cx="12" cy="12.5" r="3.4" stroke-width="2"/>', s),
   sort: (s) => svg('<path d="M8 5v14M8 5L5 8M8 5l3 3M16 19V5M16 19l-3-3M16 19l3-3" stroke-width="2"/>', s),

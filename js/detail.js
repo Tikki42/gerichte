@@ -1,14 +1,18 @@
 // Detailansicht eines Gerichts.
 
-import { state, isMain, ingName, photoUrl, markCooked, setFavorite, EFFORT, DIET_LABEL, OPTIONS } from './store.js';
-import { esc, $, fmtDate, relDays, todayYMD } from './util.js';
+import { state, isMain, ingName, photoUrl, markCooked, setFavorite, cookDays, removeCookDays, EFFORT, DIET_LABEL, OPTIONS } from './store.js';
+import { esc, $, fmtDate, relDays, todayYMD, weekdayShort, plural } from './util.js';
 import { openPage, toast, showError, emitChange } from './ui.js';
 import { openEdit } from './edit.js';
+import { openCookSheet } from './cook.js';
 import { icon } from './icons.js';
+
+const COOK_ROWS = 5; // so viele Kochtage sind sofort sichtbar, der Rest über "Alle anzeigen"
 
 export function openDetail(id) {
   let photo = null;
   let photoFor = null;
+  let allDays = false;
   const onChange = () => render();
   const page = openPage({
     title: '',
@@ -33,7 +37,7 @@ export function openDetail(id) {
       ['Optionen', options.length ? options.join('<br>') : '–'],
       ['Gekocht', d.lastCooked
         ? `zuletzt ${relDays(d.lastCooked)} (${fmtDate(d.lastCooked)})<br>insgesamt ${d.cookCount || 0}×`
-        : 'noch nie'],
+        : d.cookCount ? `insgesamt ${d.cookCount}×, ohne Datum` : 'noch nie'],
     ];
     if (d.tags?.length) rows.push(['Tags', d.tags.map(t => `<span class="tag">${esc(t)}</span>`).join('')]);
     if (d.note) rows.push(['Notiz', `<div class="note">${esc(d.note)}</div>`]);
@@ -49,12 +53,15 @@ export function openDetail(id) {
       </div>
       <div class="ing-chips">${d.ingredientIds.map(i => `<span class="ing-chip">${esc(ingName(i))}</span>`).join('') || '<span class="muted">Keine Zutaten eingetragen</span>'}</div>
       <div class="info">${rows.map(([k, v]) => `<div class="info-row"><div class="k">${k}</div><div class="v">${v}</div></div>`).join('')}</div>
+      ${cookListHtml(d, main)}
       <p class="hint">Angelegt am ${fmtDate(d.createdAt)} · geändert am ${fmtDate(d.updatedAt)}</p>`;
 
+    // "Bearbeiten" oben rechts wie in iOS-Apps, unten ist Platz für "Heute gekocht" und den Kalender-Knopf
     const cookedToday = d.lastCooked === todayYMD();
+    page.setRight(main ? '<button class="nav-btn glass" data-edit>Bearbeiten</button>' : '');
     page.setFoot(main ? `<div class="btn-row">
         <button class="btn primary big grow" data-cook ${cookedToday ? 'disabled' : ''}>${icon.check(20)} ${cookedToday ? 'Heute schon gekocht' : 'Heute gekocht'}</button>
-        <button class="btn tinted big" data-edit>Bearbeiten</button>
+        <button class="btn tinted big icon-btn" data-cook-past aria-label="Früher gekocht">${icon.calendar(24)}</button>
       </div>` : '');
 
     // Großes Foto nachladen (das Vorschaubild wird sofort gezeigt)
@@ -70,6 +77,22 @@ export function openDetail(id) {
     }
   }
 
+  // Liste "Gekocht am": neuester Tag oben, auf dem Hauptgerät mit Löschen
+  function cookListHtml(d, main) {
+    const days = cookDays(id);
+    if (!days.length) return '';
+    const shown = allDays ? days : days.slice(0, COOK_ROWS);
+    const base = d.cookCountBase || 0;
+    return `
+      <h3 class="cook-head">Gekocht am</h3>
+      <div class="list-box">${shown.map(day => `<div class="list-row cook-row">
+        <span>${weekdayShort(day)}, ${fmtDate(day)}</span><span class="when">${relDays(day)}</span>
+        ${main ? `<button class="close-btn" data-rm-day="${day}" aria-label="Kochtag ${fmtDate(day)} löschen">${icon.close(14)}</button>` : ''}
+      </div>`).join('')}</div>
+      ${days.length > shown.length ? `<button class="link-btn more-days" data-all-days>Alle ${days.length} Kochtage anzeigen</button>` : ''}
+      ${base ? `<p class="hint">Dazu ${plural(base, 'früheres Mal', 'frühere Male')} ohne Datum.</p>` : ''}`;
+  }
+
   page.el.addEventListener('click', async e => {
     try {
       if (e.target.closest('[data-fav]')) {
@@ -82,6 +105,18 @@ export function openDetail(id) {
         const undo = await markCooked(id);
         emitChange();
         if (undo) toast('Als heute gekocht eingetragen.', { action: 'Rückgängig', onAction: () => undo().then(emitChange).catch(showError) });
+      }
+      if (e.target.closest('[data-cook-past]')) openCookSheet(id);
+      const rm = e.target.closest('[data-rm-day]');
+      if (rm) {
+        const day = rm.dataset.rmDay;
+        const undo = await removeCookDays(id, [day]);
+        emitChange();
+        if (undo) toast(`Kochtag ${fmtDate(day)} gelöscht.`, { action: 'Rückgängig', onAction: () => undo().then(emitChange).catch(showError) });
+      }
+      if (e.target.closest('[data-all-days]')) {
+        allDays = true;
+        render();
       }
     } catch (err) { showError(err); }
   });

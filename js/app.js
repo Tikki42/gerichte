@@ -19,6 +19,8 @@ let results = [];
 boot();
 
 async function boot() {
+  // Kein Zoomen mit zwei Fingern, wie in einer echten App (Doppeltipp-Zoom ist per CSS abgeschaltet)
+  for (const type of ['gesturestart', 'gesturechange']) document.addEventListener(type, e => e.preventDefault(), { passive: false });
   try {
     await load();
   } catch (e) {

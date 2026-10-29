@@ -38,6 +38,10 @@ export function openPage({ title, body = '', foot = '', back = 'Zurück', right 
       $('.bottom-fade', el).hidden = !html;
       el.classList.toggle('has-foot', !!html);
     },
+    // Knopf rechts oben (z. B. "Bearbeiten")
+    setRight(html) {
+      $('.page-head', el).lastElementChild.outerHTML = html || '<span></span>';
+    },
     close() {
       if (!el.isConnected) return;
       el.remove();

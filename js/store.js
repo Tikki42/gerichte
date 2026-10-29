@@ -2,7 +2,7 @@
 // Alles wird zuerst in IndexedDB gespeichert und erst danach im Speicher (state) übernommen.
 
 import * as db from './db.js';
-import { uuid, nowISO, todayYMD, cleanName, capFirst, nameKey } from './util.js';
+import { uuid, nowISO, todayYMD, isYMD, cleanName, capFirst, nameKey } from './util.js';
 
 export const DEFAULT_METHODS = [
   { id: 'herd', name: 'Herd', icon: '🍳' },
@@ -37,19 +37,21 @@ export const state = {
   ingredients: new Map(),
   methods: new Map(),
   thumbs: new Map(), // Gericht-ID -> Object-URL des kleinen Vorschaubilds
+  cooks: new Map(),  // Gericht-ID -> Map(Tag -> Kochtag-Eintrag), auch gelöschte Tage
   meta: {},
 };
 
 // ---------- Laden ----------
 
 export async function load() {
-  const [dishes, ingredients, methods, thumbs, meta] = await Promise.all(
-    ['dishes', 'ingredients', 'methods', 'thumbs', 'meta'].map(db.getAll));
+  const [dishes, ingredients, methods, thumbs, cooks, meta] = await Promise.all(
+    ['dishes', 'ingredients', 'methods', 'thumbs', 'cooks', 'meta'].map(db.getAll));
   for (const url of state.thumbs.values()) URL.revokeObjectURL(url);
   state.dishes = new Map(dishes.map(d => [d.id, d]));
   state.ingredients = new Map(ingredients.map(i => [i.id, i]));
   state.methods = new Map(methods.map(m => [m.id, m]));
   state.thumbs = new Map(thumbs.map(t => [t.id, blobUrl(t)]));
+  state.cooks = groupCooks(cooks);
   state.meta = Object.fromEntries(meta.map(m => [m.key, m.value]));
   if (!methods.length) {
     const now = nowISO();
@@ -58,6 +60,9 @@ export async function load() {
     state.methods = new Map(defaults.map(m => [m.id, m]));
   }
   await removeGrillOnce();
+  await migrateCooksOnce();
+  // "zuletzt gekocht" und Anzahl immer passend zu den Kochtagen
+  for (const d of state.dishes.values()) if (d.cookCountBase !== undefined) Object.assign(d, derivedCookFields(d));
 }
 
 // Einmalig (Version 1.4.0): Zubereitungsart "Grill" aus dem Bestand entfernen – nur wenn kein Gericht sie nutzt.
@@ -72,6 +77,43 @@ async function removeGrillOnce() {
   });
   if (remove) state.methods.delete('grill');
   Object.assign(state.meta, patch);
+}
+
+// Einmalig (Version 1.5.0): Kochtage als eigene Einträge. Der bisherige letzte Kochtag wird der erste Eintrag,
+// die Gesamtzahl bleibt gleich (frühere Male ohne Datum zählen als cookCountBase). Zählt nicht für den Export-Hinweis.
+async function migrateCooksOnce() {
+  if (state.meta.cooksMigrated) return;
+  const ts = nowISO();
+  const recs = [];
+  const dishes = [];
+  for (const d of state.dishes.values()) {
+    if (d.cookCountBase !== undefined) continue;
+    const day = isYMD(d.lastCooked) ? d.lastCooked : null;
+    const count = Number.isInteger(d.cookCount) && d.cookCount > 0 ? d.cookCount : 0;
+    const base = Math.max(0, count - (day ? 1 : 0));
+    if (day) recs.push({ id: cookKey(d.id, day), dishId: d.id, day, deleted: false, ts });
+    dishes.push({ ...d, cookCountBase: base, lastCooked: day, cookCount: base + (day ? 1 : 0) });
+  }
+  await db.write(['cooks', 'dishes', 'meta'], s => {
+    recs.forEach(r => s.cooks.put(r));
+    dishes.forEach(d => s.dishes.put(d));
+    putMeta(s.meta, { cooksMigrated: true });
+  });
+  for (const r of recs) {
+    if (!state.cooks.has(r.dishId)) state.cooks.set(r.dishId, new Map());
+    state.cooks.get(r.dishId).set(r.day, r);
+  }
+  dishes.forEach(d => state.dishes.set(d.id, d));
+  state.meta.cooksMigrated = true;
+}
+
+function groupCooks(recs) {
+  const m = new Map();
+  for (const c of recs) {
+    if (!m.has(c.dishId)) m.set(c.dishId, new Map());
+    m.get(c.dishId).set(c.day, c);
+  }
+  return m;
 }
 
 const blobUrl = rec => URL.createObjectURL(new Blob([rec.data], { type: rec.type || 'image/jpeg' }));
@@ -187,8 +229,9 @@ export function blankDish() {
     tags: [],
     note: '',
     link: '',
-    lastCooked: null,
-    cookCount: 0,
+    lastCooked: null,    // abgeleitet aus den Kochtagen
+    cookCount: 0,        // abgeleitet: cookCountBase + Zahl der Kochtage
+    cookCountBase: 0,    // frühere Male ohne Datum (aus der Zeit vor 1.5.0)
     createdAt: null,
     updatedAt: null,
   };
@@ -229,6 +272,7 @@ export async function saveDish(draft, ingredients, photo) {
     createdAt: prev?.createdAt || now,
     updatedAt: now,
   };
+  Object.assign(dish, derivedCookFields(dish)); // Kochtage gehören nicht zum Formular
   if (prev && photo === undefined && !newIngs.length && contentKey(prev) === contentKey(dish)) {
     return { dish: prev, changed: false };
   }
@@ -272,24 +316,76 @@ async function patchDish(id, fields, countsForExport) {
 
 export const setFavorite = (id, favorite) => patchDish(id, { favorite }, true);
 
-// Setzt "zuletzt gekocht" auf heute. Gibt eine Rückgängig-Funktion zurück (oder null, wenn schon eingetragen).
-export async function markCooked(id) {
-  const prev = state.dishes.get(id);
-  if (prev.lastCooked === todayYMD()) return null;
-  const before = { lastCooked: prev.lastCooked, cookCount: prev.cookCount || 0 };
-  await patchDish(id, { lastCooked: todayYMD(), cookCount: before.cookCount + 1 }, false);
-  return () => patchDish(id, before, false);
+// ---------- Kochtage ----------
+// Jeder Kochtag ist ein eigener Eintrag { id: "Gericht-ID|JJJJ-MM-TT", dishId, day, deleted, ts }.
+// Gelöschte Tage bleiben mit deleted: true stehen, damit ein späterer Abgleich sie zusammenführen kann.
+// lastCooked und cookCount im Gericht werden daraus abgeleitet. Kochtage zählen nicht für den Export-Hinweis.
+
+export const cookKey = (dishId, day) => `${dishId}|${day}`;
+
+const activeDays = cooks => (cooks ? [...cooks.values()].filter(c => !c.deleted).map(c => c.day).sort() : []);
+
+function derivedCookFields(dish, cooks = state.cooks.get(dish.id)) {
+  const days = activeDays(cooks);
+  return { lastCooked: days.length ? days[days.length - 1] : null, cookCount: (dish.cookCountBase || 0) + days.length };
 }
+
+// Eingetragene Kochtage eines Gerichts, neuester zuerst
+export const cookDays = dishId => activeDays(state.cooks.get(dishId)).reverse();
+
+async function writeCooks(dishId, recs) {
+  const cooks = new Map(state.cooks.get(dishId));
+  recs.forEach(r => cooks.set(r.day, r));
+  const dish = { ...state.dishes.get(dishId) };
+  Object.assign(dish, derivedCookFields(dish, cooks));
+  const meta = changeMeta(false);
+  await db.write(['cooks', 'dishes', 'meta'], s => {
+    recs.forEach(r => s.cooks.put(r));
+    s.dishes.put(dish);
+    putMeta(s.meta, meta);
+  });
+  state.cooks.set(dishId, cooks);
+  state.dishes.set(dishId, dish);
+  Object.assign(state.meta, meta);
+}
+
+// Trägt Kochtage ein (heute oder früher, nie in der Zukunft). Gibt eine Rückgängig-Funktion zurück,
+// oder null, wenn alle Tage schon eingetragen waren.
+export async function addCookDays(dishId, days) {
+  const today = todayYMD();
+  const have = new Set(cookDays(dishId));
+  const fresh = [...new Set(days)].filter(day => isYMD(day) && day <= today && !have.has(day));
+  if (!fresh.length) return null;
+  const ts = nowISO();
+  await writeCooks(dishId, fresh.map(day => ({ id: cookKey(dishId, day), dishId, day, deleted: false, ts })));
+  return () => removeCookDays(dishId, fresh);
+}
+
+// Löscht Kochtage (als Markierung). Gibt eine Rückgängig-Funktion zurück oder null.
+export async function removeCookDays(dishId, days) {
+  const cooks = state.cooks.get(dishId);
+  const gone = days.filter(day => cooks?.get(day) && !cooks.get(day).deleted);
+  if (!gone.length) return null;
+  const ts = nowISO();
+  await writeCooks(dishId, gone.map(day => ({ ...cooks.get(day), deleted: true, ts })));
+  return () => addCookDays(dishId, gone);
+}
+
+// "Heute gekocht": Rückgängig-Funktion oder null, wenn heute schon eingetragen
+export const markCooked = id => addCookDays(id, [todayYMD()]);
 
 export async function deleteDish(id) {
   const meta = changeMeta(true);
-  await db.write(['dishes', 'photos', 'thumbs', 'meta'], s => {
+  const days = [...(state.cooks.get(id)?.keys() || [])];
+  await db.write(['dishes', 'photos', 'thumbs', 'cooks', 'meta'], s => {
     s.dishes.delete(id);
     s.photos.delete(id);
     s.thumbs.delete(id);
+    days.forEach(day => s.cooks.delete(cookKey(id, day)));
     putMeta(s.meta, meta);
   });
   state.dishes.delete(id);
+  state.cooks.delete(id);
   setThumb(id, null);
   Object.assign(state.meta, meta);
 }
@@ -378,7 +474,7 @@ export async function deleteMethod(id) {
 export async function replaceAll(data, metaPatch) {
   await db.write([...db.DATA_STORES, 'meta'], s => {
     for (const n of db.DATA_STORES) s[n].clear();
-    for (const n of db.DATA_STORES) data[n].forEach(rec => s[n].put(rec));
+    for (const n of db.DATA_STORES) (data[n] || []).forEach(rec => s[n].put(rec));
     putMeta(s.meta, metaPatch);
   });
   await load();
@@ -388,7 +484,7 @@ export async function replaceAll(data, metaPatch) {
 export async function addAll(data) {
   const meta = changeMeta(true, data.dishes.length);
   await db.write([...db.DATA_STORES, 'meta'], s => {
-    for (const n of db.DATA_STORES) data[n].forEach(rec => s[n].put(rec));
+    for (const n of db.DATA_STORES) (data[n] || []).forEach(rec => s[n].put(rec));
     putMeta(s.meta, meta);
   });
   await load();
