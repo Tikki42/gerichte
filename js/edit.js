@@ -21,7 +21,8 @@ export function openEdit(id, { onSaved } = {}) {
   const page = openPage({
     title: isNew ? 'Neues Gericht' : 'Bearbeiten',
     back: 'Abbrechen',
-    beforeClose: async () => !dirty || confirmSheet({ title: 'Änderungen verwerfen?', ok: 'Verwerfen', cancel: 'Weiter bearbeiten', danger: true }),
+    // sofort true ohne Änderungen – so kann das Zurück-Wischen ohne Rückfrage durchlaufen
+    beforeClose: () => !dirty || confirmSheet({ title: 'Änderungen verwerfen?', ok: 'Verwerfen', cancel: 'Weiter bearbeiten', danger: true }),
     onClose: () => photo?.url && URL.revokeObjectURL(photo.url),
   });
 
@@ -172,7 +173,7 @@ export function openEdit(id, { onSaved } = {}) {
     try {
       const { dish: saved, changed } = await saveDish(draft, ings, photo === undefined ? undefined : photo && { full: photo.full, thumb: photo.thumb });
       dirty = false;
-      page.close();
+      if (!onSaved) page.close(); // sonst öffnet onSaved die nächste Seite an ihrer Stelle (siehe app.js)
       if (changed) emitChange();
       toast(isNew ? `„${saved.name}“ gespeichert.` : changed ? 'Änderungen gespeichert.' : 'Keine Änderungen.');
       onSaved?.(saved);
@@ -195,7 +196,7 @@ export function openEdit(id, { onSaved } = {}) {
   }
 
   sync();
-  if (isNew) setTimeout(() => $('#fTitle', page.el)?.focus(), 250);
+  if (isNew) page.opened.then(() => page.closing || $('#fTitle', page.el)?.focus());
 }
 
 // Eingabefeld mit Chips und Vorschlägen (für Zutaten und Tags).

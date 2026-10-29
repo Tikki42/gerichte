@@ -26,7 +26,10 @@ alle Daten liegen lokal im iPhone (IndexedDB). Übertragen wird per Exportdatei 
 | `js/db.js` | IndexedDB (jede Änderung in einer Transaktion: alles oder nichts) |
 | `js/photo.js` | Fotos verkleinern (1200 px JPEG + 360 px Vorschaubild) |
 | `js/pwa.js` | Service-Worker-Anbindung, Hinweis „Neue Version“ |
-| `js/ui.js`, `js/util.js` | Oberflächen-Bausteine, Hilfsfunktionen |
+| `js/ui.js` | Oberflächen-Bausteine: Seitenstapel mit Browser-Verlauf, Zurück-Wischen, Fenster von unten, Hinweise |
+| `js/motion.js` | Übergänge mit der Web Animations API, weiche Liste, „Bewegung reduzieren“ |
+| `js/gestures.js` | Wischgesten per Touch (folgen dem Finger, Schwelle nach Strecke und Tempo) |
+| `js/util.js` | Hilfsfunktionen |
 | `js/icons.js` | Symbole (SVG) im Stil der iOS-Systemsymbole |
 
 ### Datenmodell (IndexedDB „gerichte“)
@@ -173,6 +176,23 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
 - Zoom: `touch-action: manipulation` auf allen Elementen verhindert das Zoomen per Doppeltippen,
   `gesturestart`/`gesturechange` werden abgefangen (kein Zwei-Finger-Zoom).
 - Detailseite: „Bearbeiten“ steht oben rechts (`page.setRight` in `js/ui.js`), unten „Heute gekocht“ und der Kalender-Knopf.
+- Seiten (seit 1.6.0): `openPage` legt je Seite einen Eintrag im Browser-Verlauf an (`history.state.gerichte` = Zahl der
+  offenen Seiten). Zurück-Knopf, Zurück-Wischen und Browser-Zurück laufen darüber; `page.close()` geht selbst im Verlauf
+  zurück. `beforeClose` gibt `true` zurück (Seite darf sofort zu) oder ein Promise (Rückfrage) – so federt das Wischen bei
+  ungespeicherten Änderungen zurück und fragt. `openPage({ replace: true })` ersetzt die oberste Seite (Detail nach
+  „Neues Gericht“). Verdeckte Seiten tragen `.under`/`.covered` (nicht antippbar, unsichtbar, Scroll-Position bleibt).
+- Zurück-Wischen: eigene Geste nur in der installierten App, 24 pt breiter Streifen am linken Rand, nur bei überwiegend
+  waagrechter Bewegung; schließt ab 40 % der Breite oder bei kräftigem Schnippen, sonst federt die Seite zurück.
+  In Safari übernimmt dessen eigene Geste; hat der Browser den Wechsel schon gezeigt (`hasUAVisualTransition`),
+  wird nicht noch einmal animiert. Blättert iOS in der installierten App selbst zurück, merkt sich die App das
+  (`localStorage` `nativeBack`) und zeigt es in den Einstellungen unter „App“ an („Erkannt: iOS blättert …“).
+- Fenster von unten: Griff oben, nach unten wegwischen am Kopf/Fuß oder im Inhalt, wenn dieser ganz oben steht.
+- „Bewegung reduzieren“: Seiten, Fenster und Liste blenden nur über (`reduceMotion()` in `js/motion.js`).
+- iPad/breite Fenster: ab 700 pt Breite Karten in 2 Spalten, ab 1000 pt in 3; Unterseiten mittig in 680 pt Breite,
+  Fenster von unten mittig (ab 600 pt Höhe). Alles in `@media`-Regeln am Ende von `app.css`, darunter bleibt alles wie bisher.
+- Testen im eingebauten Browser: Ist der Browser-Bereich verborgen, laufen Animationen nicht weiter – vorher
+  `document.getAnimations().forEach(a => a.finish())`. Das Wischen lässt sich mit `TouchEvent`s und
+  `Object.defineProperty(navigator, 'standalone', { value: true, configurable: true })` prüfen.
 - Ist ein Fenster von unten offen, erscheinen Hinweise (Toasts) oben, damit sie keine Knöpfe verdecken.
 - Lesegerät: alle datenändernden Knöpfe werden über `isMain()` ausgeblendet.
 - Speichern ohne echte Änderung schreibt nichts und zählt nicht für den Export-Hinweis (`saveDish` vergleicht den Inhalt).

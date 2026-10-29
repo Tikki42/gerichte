@@ -3,7 +3,7 @@
 import { state, isMain, setMeta } from './store.js';
 import { buildExport, readJsonFile, prepareReplace, commitReplace, prepareAdd, commitAdd } from './io.js';
 import { checkForUpdate, appVersion } from './pwa.js';
-import { esc, $, fmtDateTime, fmtDate, fmtBytes, plural, isStandalone } from './util.js';
+import { esc, $, fmtDateTime, fmtDate, fmtBytes, plural, isStandalone, lsGet } from './util.js';
 import { openPage, openSheet, confirmSheet, toast, showError, emitChange } from './ui.js';
 import { openIngredients, openMethods } from './manage.js';
 import { icon } from './icons.js';
@@ -38,6 +38,7 @@ export function openSettings({ focus } = {}) {
   function render() {
     const main = isMain();
     const m = state.meta;
+    const nativeBack = lsGet('nativeBack', null); // gemerkt in ui.js, wenn iOS in der App selbst zurückblättert
     page.body.innerHTML = `
       <div class="section"><h3>Dieses iPhone ist …</h3><div class="box">
         <div class="segmented">
@@ -72,6 +73,7 @@ export function openSettings({ focus } = {}) {
       <div class="section"><h3>App</h3><div class="box">
         <p>Bestand: ${plural(state.dishes.size, 'Gericht', 'Gerichte')}, ${plural(state.thumbs.size, 'Foto', 'Fotos')}</p>
         <p>Version: <b id="ver">…</b></p>
+        ${nativeBack ? `<p class="hint">Erkannt: iOS blättert in dieser App selbst zurück (zuletzt am ${fmtDateTime(nativeBack)}).</p>` : ''}
         <button class="btn tinted" data-update>Nach neuer Version suchen</button>
       </div></div>`;
     renderStorage();

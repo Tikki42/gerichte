@@ -4,6 +4,7 @@ import { state, load, isMain, setMeta, ingName, methodList, ingredientUsage, mar
 import { filters, resetFilters, activeFilterCount, query, pickRandom, SORTS, OTHER_FILTERS } from './search.js';
 import { esc, $, fmtShort, relDays, lsGet, lsSet, isStandalone, fold, plural } from './util.js';
 import { openSheet, toast, showError, emitChange } from './ui.js';
+import { flipList } from './motion.js';
 import { icon } from './icons.js';
 import { initServiceWorker } from './pwa.js';
 import { openDetail } from './detail.js';
@@ -111,7 +112,8 @@ function renderShell() {
     renderList();
   });
   $('#btnSettings').addEventListener('click', () => openSettings());
-  $('#btnAdd').addEventListener('click', () => openEdit(null, { onSaved: d => openDetail(d.id) }));
+  // Nach dem Anlegen ersetzt die Detailseite die Bearbeiten-Seite, Zurück führt zur Liste
+  $('#btnAdd').addEventListener('click', () => openEdit(null, { onSaved: d => openDetail(d.id, { replace: true }) }));
   $('#btnRandom').addEventListener('click', openRandom);
   $('#btnSort').addEventListener('click', openSortSheet);
   $('#filterbar').addEventListener('click', onFilterChip);
@@ -399,24 +401,23 @@ function cardHtml({ dish: d, hits }) {
 function renderList() {
   results = query(searchText, sort);
   const total = state.dishes.size;
-  const list = $('#list');
   $('#count').textContent = results.length === total ? plural(total, 'Gericht', 'Gerichte') : `${results.length} von ${total} Gerichten`;
   const sortLabel = filters.ings.length && filters.ingMode === 'any' ? 'Treffer, dann ' + SORTS[sort] : SORTS[sort];
   $('#btnSort').innerHTML = `${icon.sort(15)} ${esc(sortLabel)}`;
   $('#btnRandom').disabled = !results.length;
+  // Karten gleiten beim Suchen, Filtern und Sortieren an ihre neue Stelle
+  flipList($('#list'), () => { $('#list').innerHTML = listHtml(total); });
+}
 
+function listHtml(total) {
   if (!total) {
-    list.innerHTML = isMain()
+    return isMain()
       ? `<div class="empty"><p>Noch keine Gerichte.</p><p>Tippe unten auf <b>+</b>, um das erste anzulegen – oder lade eine Liste über Einstellungen → „Gerichte hinzufügen“.</p></div>`
       : `<div class="empty"><p>Noch keine Daten auf diesem iPhone.</p><p>Lade die neueste Datei aus eurem geteilten iCloud-Ordner.</p>
          <button class="btn primary" data-import>Daten aktualisieren</button></div>`;
-    return;
   }
-  if (!results.length) {
-    list.innerHTML = '<div class="empty"><p>Keine Treffer.</p><button class="btn" data-reset>Suche und Filter zurücksetzen</button></div>';
-    return;
-  }
-  list.innerHTML = results.map(cardHtml).join('');
+  if (!results.length) return '<div class="empty"><p>Keine Treffer.</p><button class="btn" data-reset>Suche und Filter zurücksetzen</button></div>';
+  return results.map(cardHtml).join('');
 }
 
 // ---------- Was essen wir heute? ----------

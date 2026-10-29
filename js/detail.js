@@ -9,13 +9,15 @@ import { icon } from './icons.js';
 
 const COOK_ROWS = 5; // so viele Kochtage sind sofort sichtbar, der Rest über "Alle anzeigen"
 
-export function openDetail(id) {
+// replace: ersetzt die oberste Seite (nach „Neues Gericht“ → Speichern)
+export function openDetail(id, { replace = false } = {}) {
   let photo = null;
   let photoFor = null;
   let allDays = false;
   const onChange = () => render();
   const page = openPage({
     title: '',
+    replace,
     onClose: () => {
       document.removeEventListener('data-changed', onChange);
       if (photo) URL.revokeObjectURL(photo);
