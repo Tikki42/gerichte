@@ -181,18 +181,22 @@ zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.
   zurück. `beforeClose` gibt `true` zurück (Seite darf sofort zu) oder ein Promise (Rückfrage) – so federt das Wischen bei
   ungespeicherten Änderungen zurück und fragt. `openPage({ replace: true })` ersetzt die oberste Seite (Detail nach
   „Neues Gericht“). Verdeckte Seiten tragen `.under`/`.covered` (nicht antippbar, unsichtbar, Scroll-Position bleibt).
-- Zurück-Wischen: eigene Geste nur in der installierten App, 24 pt breiter Streifen am linken Rand, nur bei überwiegend
+- Ausnahme seit 1.6.1: In der installierten App auf iPhone/iPad (`navigator.standalone`) legt die App **keine**
+  Verlaufseinträge an. Findet iOS dort Einträge, wischt es selbst zurück (mit einem Standbild der vorigen Seite) –
+  gleichzeitig mit der eigenen Geste, die Startseite erschien dann doppelt (1.6.0, iOS 27.2, iPhone 17 Pro).
+  Alte Einträge (z. B. nach „Neu laden“ aus 1.6.0) verlässt die App sofort wieder.
+- Zurück-Wischen: eigene Geste nur in der installierten iOS-App, 24 pt breiter Streifen am linken Rand, nur bei überwiegend
   waagrechter Bewegung; schließt ab 40 % der Breite oder bei kräftigem Schnippen, sonst federt die Seite zurück.
-  In Safari übernimmt dessen eigene Geste; hat der Browser den Wechsel schon gezeigt (`hasUAVisualTransition`),
-  wird nicht noch einmal animiert. Blättert iOS in der installierten App selbst zurück, merkt sich die App das
-  (`localStorage` `nativeBack`) und zeigt es in den Einstellungen unter „App“ an („Erkannt: iOS blättert …“).
+  In Safari übernimmt dessen eigene Geste über den Verlauf; hat der Browser den Wechsel schon gezeigt
+  (`hasUAVisualTransition`), wird nicht noch einmal animiert.
 - Fenster von unten: Griff oben, nach unten wegwischen am Kopf/Fuß oder im Inhalt, wenn dieser ganz oben steht.
 - „Bewegung reduzieren“: Seiten, Fenster und Liste blenden nur über (`reduceMotion()` in `js/motion.js`).
 - iPad/breite Fenster: ab 700 pt Breite Karten in 2 Spalten, ab 1000 pt in 3; Unterseiten mittig in 680 pt Breite,
   Fenster von unten mittig (ab 600 pt Höhe). Alles in `@media`-Regeln am Ende von `app.css`, darunter bleibt alles wie bisher.
 - Testen im eingebauten Browser: Ist der Browser-Bereich verborgen, laufen Animationen nicht weiter – vorher
   `document.getAnimations().forEach(a => a.finish())`. Das Wischen lässt sich mit `TouchEvent`s und
-  `Object.defineProperty(navigator, 'standalone', { value: true, configurable: true })` prüfen.
+  `Object.defineProperty(navigator, 'standalone', { value: true, configurable: true })` prüfen (installierte
+  iOS-App: kein Verlauf, eigene Geste an).
 - Ist ein Fenster von unten offen, erscheinen Hinweise (Toasts) oben, damit sie keine Knöpfe verdecken.
 - Lesegerät: alle datenändernden Knöpfe werden über `isMain()` ausgeblendet.
 - Speichern ohne echte Änderung schreibt nichts und zählt nicht für den Export-Hinweis (`saveDish` vergleicht den Inhalt).

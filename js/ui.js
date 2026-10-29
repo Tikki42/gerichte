@@ -1,7 +1,7 @@
 // Bausteine der Oberfläche: Vollbild-Seiten (Seitenstapel im Browser-Verlauf, Zurück-Wischen),
 // Fenster von unten (Bottom Sheets), Rückfragen, Hinweise.
 
-import { esc, $, isStandalone, lsSet, nowISO } from './util.js';
+import { esc, $ } from './util.js';
 import { icon } from './icons.js';
 import { animateTo, fade, allDone, reduceMotion, MS } from './motion.js';
 import { dragGesture, passed } from './gestures.js';
@@ -144,6 +144,10 @@ function closePage(page, { fromHistory = false, animate = true, slide = false, d
 // ---------- Browser-Verlauf ----------
 // Jede offene Seite hat einen Eintrag im Verlauf (state.gerichte = Zahl der offenen Seiten).
 // So nehmen Zurück-Knopf, Zurück-Wischen und Browser-Zurück (Safari, später Android) denselben Weg.
+// Ausnahme: die installierte App auf iPhone und iPad (navigator.standalone). Findet iOS dort Verlaufseinträge,
+// wischt es selbst zurück – mit einem Standbild der vorigen Seite und gleichzeitig mit der eigenen Geste,
+// die Startseite erscheint dann doppelt (iOS 27.2). Dort gibt es deshalb nur die eigene Geste, ohne Verlauf.
+const useHistory = () => navigator.standalone !== true;
 
 let histQueue = Promise.resolve();
 let histWait = null; // eigenes history.go(), dessen popstate noch aussteht
@@ -151,8 +155,8 @@ let histWait = null; // eigenes history.go(), dessen popstate noch aussteht
 const histDepth = () => history.state?.gerichte ?? 0;
 // nacheinander ausführen, denn history.go() wirkt erst später (popstate)
 const histDo = fn => { histQueue = histQueue.then(fn).catch(e => console.warn('Verlauf:', e)); };
-const histPush = depth => histDo(() => history.pushState({ gerichte: depth }, ''));
-const histReplace = depth => histDo(() => history.replaceState({ gerichte: depth }, ''));
+const histPush = depth => { if (useHistory()) histDo(() => history.pushState({ gerichte: depth }, '')); };
+const histReplace = depth => { if (useHistory()) histDo(() => history.replaceState({ gerichte: depth }, '')); };
 
 function histGoTo(depth) {
   histDo(() => new Promise(resolve => {
@@ -168,15 +172,19 @@ function histGoTo(depth) {
 window.addEventListener('popstate', e => {
   const depth = histDepth();
   if (histWait?.depth === depth) return histWait.done();
+  if (!useHistory()) {
+    // installierte iOS-App: alte Einträge (z. B. aus 1.6.0) verlassen, damit iOS nichts zum Zurückwischen findet
+    if (depth > 0) histGoTo(0);
+    return;
+  }
   browserBack(depth, e.hasUAVisualTransition === true);
 });
 
-// Zurück im Browser oder durch iOS selbst (nicht über die App): Seiten oberhalb der Zieltiefe schließen.
+// Zurück im Browser (nicht über die App): Seiten oberhalb der Zieltiefe schließen.
 // uaAnimated: Der Browser hat den Wechsel schon gezeigt (Safari-Wischgeste) – dann nicht noch einmal animieren.
 function browserBack(depth, uaAnimated) {
   if (depth > pages.length) return histReplace(pages.length); // vorwärts: diese Seite gibt es nicht mehr
   if (depth === pages.length) return;
-  if (isStandalone()) lsSet('nativeBack', nowISO()); // für die Prüfliste: blättert iOS in der App selbst zurück?
   for (const s of [...sheets].reverse()) s.close();
   const top = pages.at(-1);
   const ok = top.beforeClose ? top.beforeClose() : true;
@@ -192,7 +200,8 @@ function browserBack(depth, uaAnimated) {
 if (histDepth() > 0) histGoTo(0);
 
 // ---------- Zurück-Wischen vom linken Rand ----------
-// Nur in der installierten App – im Safari-Browser übernimmt dessen eigene Geste (über den Verlauf).
+// Nur in der installierten App auf iPhone und iPad (ohne Verlauf, siehe oben) –
+// im Safari-Browser übernimmt dessen eigene Geste (über den Verlauf).
 
 const EDGE = 24; // Breite des Randstreifens in Punkten
 
@@ -200,7 +209,7 @@ dragGesture(layer(), {
   axis: 'x',
   begin(e, t) {
     const page = pages.at(-1);
-    if (t.clientX > EDGE || moving || sheets.length || !page?.el.contains(e.target) || !isStandalone()) return null;
+    if (t.clientX > EDGE || useHistory() || moving || sheets.length || !page?.el.contains(e.target)) return null;
     return { page, under: pages.at(-2)?.el || home() };
   },
   start(g) {
