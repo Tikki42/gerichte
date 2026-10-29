@@ -1,12 +1,15 @@
 // Einstieg: Start, Startseite mit Suche/Filtern/Liste und "Was essen wir heute?".
 
-import { state, load, isMain, setMeta, ingName, methodList, ingredientUsage, markCooked, photoUrl, DIETS, DIET_LABEL, EFFORT } from './store.js';
+import { state, load, canEdit, isSynced, setMeta, exportDue, lastExport, ingName, methodList, ingredientUsage, markCooked, photoUrl,
+  DIETS, DIET_LABEL, EFFORT, EXPORT_REMIND_DAYS } from './store.js';
 import { filters, resetFilters, activeFilterCount, query, pickRandom, SORTS, OTHER_FILTERS } from './search.js';
 import { esc, $, fmtShort, relDays, lsGet, lsSet, isStandalone, fold, plural } from './util.js';
-import { openSheet, toast, showError, emitChange } from './ui.js';
+import { openSheet, alertSheet, toast, showError, emitChange } from './ui.js';
 import { flipList } from './motion.js';
 import { icon } from './icons.js';
-import { initServiceWorker } from './pwa.js';
+import { initServiceWorker, checkForUpdate } from './pwa.js';
+import { start as startSync, onSyncStatus } from './sync.js';
+import { syncButtonHtml, openSyncSheet, openCreateSheet, openJoinSheet } from './syncui.js';
 import { openDetail } from './detail.js';
 import { openEdit } from './edit.js';
 import { openSettings, openImport } from './settings.js';
@@ -16,6 +19,7 @@ let searchText = '';
 let sort = lsGet('sort', 'longest');
 if (!SORTS[sort]) sort = 'longest'; // z. B. frühere Sortierung "Zeit"
 let results = [];
+let lastState = null; // letzter Zustand des Abgleichs (für einmalige Hinweise)
 
 boot();
 
@@ -32,8 +36,22 @@ async function boot() {
   initServiceWorker();
   requestPersistentStorage();
   document.addEventListener('data-changed', () => { if ($('#list')) renderAll(); });
+  onSyncStatus(onStatus);
   if (!state.meta.deviceType) showWelcome();
   else renderShell();
+  startSync();
+}
+
+// Symbol oben aktualisieren; wurde das Gerät auf einem anderen entfernt, einmal Bescheid sagen
+function onStatus(st) {
+  if ($('#list')) renderTop();
+  if (st.state === lastState) return;
+  lastState = st.state;
+  if (st.state === 'removed') {
+    alertSheet('Aus der Sammlung entfernt', `<p>Dieses Gerät wurde auf einem anderen Gerät aus eurer Sammlung entfernt.
+      Die Gerichte bleiben hier erhalten, werden aber nicht mehr abgeglichen.</p>
+      <p class="muted">Wieder dabei sein: Einstellungen → „Mit Code beitreten“.</p>`);
+  }
 }
 
 async function requestPersistentStorage() {
@@ -48,23 +66,31 @@ function showWelcome() {
   app.innerHTML = `
     <div class="welcome">
       <h1>Willkommen!</h1>
-      <p>Wofür nutzt ihr dieses iPhone?</p>
-      <button class="choice" data-type="main">
-        <b>Hauptgerät</b>
-        <span>Hier wird die Bibliothek gepflegt: Gerichte anlegen, bearbeiten, exportieren.</span>
+      <p>Wie möchtest du die App auf diesem Gerät nutzen?</p>
+      <button class="choice" data-start="create">
+        <b>Neue Sammlung anlegen</b>
+        <span>Für das erste Gerät. Weitere Geräte treten mit einem Code bei, alle Änderungen werden abgeglichen.</span>
       </button>
-      <button class="choice" data-type="reader">
-        <b>Lesegerät</b>
-        <span>Nur suchen, filtern und zufällig auswählen. Die Daten kommen als Datei vom Hauptgerät.</span>
+      <button class="choice" data-start="join">
+        <b>Mit Code beitreten</b>
+        <span>Ein Gerät, das schon dabei ist, zeigt unter Einstellungen → „Gerät einladen“ einen Code.</span>
       </button>
-      <p class="muted">Lässt sich später in den Einstellungen ändern.</p>
+      <button class="choice" data-start="local">
+        <b>Nur auf diesem Gerät nutzen</b>
+        <span>Ohne Abgleich. Lässt sich später in den Einstellungen ändern.</span>
+      </button>
       ${isStandalone() ? '' : `<div class="error-box">Tipp: Öffne die App über das Symbol auf dem Home-Bildschirm.
         Daten in Safari und in der Home-Bildschirm-App sind getrennt.</div>`}
     </div>`;
-  app.querySelectorAll('[data-type]').forEach(b => b.addEventListener('click', async () => {
+  app.querySelectorAll('[data-start]').forEach(b => b.addEventListener('click', async () => {
+    const how = b.dataset.start;
     try {
-      await setMeta({ deviceType: b.dataset.type });
-      renderShell();
+      if (how === 'create') openCreateSheet({ onDone: renderShell });
+      if (how === 'join') openJoinSheet({ onDone: renderShell });
+      if (how === 'local') {
+        await setMeta({ deviceType: 'main' });
+        renderShell();
+      }
     } catch (e) { showError(e); }
   }));
 }
@@ -136,19 +162,26 @@ function renderAll() {
 }
 
 function renderTop() {
-  const main = isMain();
+  const edit = canEdit();
   const m = state.meta;
-  $('#btnAdd').hidden = !main;
-  $('#standSlot').innerHTML = main ? '' :
+  $('#btnAdd').hidden = !edit;
+  // Rechts neben dem Titel: Abgleich-Symbol (in einer Sammlung) bzw. Datenstand (Lesegerät)
+  $('#standSlot').innerHTML = isSynced() ? syncButtonHtml() : edit ? '' :
     `<button class="stand-btn glass" id="btnStand">${m.lastImport ? `Stand ${fmtShort(m.dataStand)}` : 'Keine Daten'} ${icon.again(15)}</button>`;
   $('#btnStand')?.addEventListener('click', () => openImport('replace'));
-  const changes = m.changesSinceExport || 0;
-  $('#btnSettings').classList.toggle('badge-dot', main && changes > 0);
+  $('#btnSync')?.addEventListener('click', () => openSyncSheet({ onSettings: () => openSettings() }));
+  const due = exportDue();
+  $('#btnSettings').classList.toggle('badge-dot', due);
 
   const notice = $('#notice');
   let html = '';
-  if (main && changes > 0) {
-    html = `<span><b>${plural(changes, 'Änderung', 'Änderungen')}</b> seit dem letzten Export – jetzt sichern ›</span>`;
+  if (lastState === 'update') {
+    html = '<span><b>Bitte die App aktualisieren</b>, damit der Abgleich weitergeht – hier tippen ›</span>';
+    notice.dataset.kind = 'update';
+  } else if (due) {
+    html = lastExport()
+      ? `<span>Letzter Export vor über ${EXPORT_REMIND_DAYS} Tagen – <b>jetzt sichern</b> ›</span>`
+      : '<span>Noch kein Export – <b>jetzt sichern</b> ›</span>';
     notice.dataset.kind = 'export';
   } else if (!isStandalone() && !lsGet('hideInstallTip', false)) {
     html = '<span>Tipp: In Safari über „Teilen“ → „Zum Home-Bildschirm“ als App installieren. Tippen zum Ausblenden.</span>';
@@ -161,6 +194,9 @@ function renderTop() {
 function onNotice() {
   const kind = $('#notice').dataset.kind;
   if (kind === 'export') openSettings({ focus: 'export' });
+  if (kind === 'update') {
+    checkForUpdate().then(r => toast(r === 'update' ? 'Neue Version gefunden – oben auf „Neu laden“ tippen.' : 'Noch keine neue Version gefunden. Bitte später erneut versuchen.'));
+  }
   if (kind === 'install') {
     lsSet('hideInstallTip', true);
     renderTop();
@@ -411,8 +447,8 @@ function renderList() {
 
 function listHtml(total) {
   if (!total) {
-    return isMain()
-      ? `<div class="empty"><p>Noch keine Gerichte.</p><p>Tippe unten auf <b>+</b>, um das erste anzulegen – oder lade eine Liste über Einstellungen → „Gerichte hinzufügen“.</p></div>`
+    return canEdit()
+      ? `<div class="empty"><p>Noch keine Gerichte${isSynced() ? ' in eurer Sammlung' : ''}.</p><p>Tippe unten auf <b>+</b>, um das erste anzulegen – oder lade eine Liste über Einstellungen → „Gerichte hinzufügen“.</p></div>`
       : `<div class="empty"><p>Noch keine Daten auf diesem iPhone.</p><p>Lade die neueste Datei aus eurem geteilten iCloud-Ordner.</p>
          <button class="btn primary" data-import>Daten aktualisieren</button></div>`;
   }
@@ -448,7 +484,7 @@ function openRandom() {
         <button class="link-btn" data-open style="padding:0;min-height:0">Details ansehen ›</button></p>
       <p class="hint">Aus ${plural(pool.length, 'Gericht', 'Gerichten')} der aktuellen Auswahl.</p>`;
     s.setFoot(`<button class="btn tinted big grow" data-again>${icon.again(20)} Nochmal</button>
-      ${isMain() ? `<button class="btn primary big grow" data-cook>${icon.check(20)} Machen wir</button>` : ''}`);
+      ${canEdit() ? `<button class="btn primary big grow" data-cook>${icon.check(20)} Machen wir</button>` : ''}`);
     s.current = d;
     if (thumb) {
       photoUrl(d.id).then(u => {

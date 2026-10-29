@@ -2,7 +2,7 @@
 // Dateiformat: siehe README.md
 
 import * as db from './db.js';
-import { state, replaceAll, addAll, methodList, cookKey } from './store.js';
+import { state, replaceAll, addAll, methodList, cookKey, fullPhoto, photoVersion } from './store.js';
 import { makeThumb, processPhoto } from './photo.js';
 import { nowISO, ymd, uuid, cleanName, capFirst, nameKey, isYMD, bufToBase64, dataUrlToBuf, byName } from './util.js';
 
@@ -20,39 +20,53 @@ export class ImportError extends Error {
 
 const toDataUrl = rec => `data:${rec.type || 'image/jpeg'};base64,${bufToBase64(rec.data)}`;
 
+// Nur abgeglichene Angaben gehören in die Datei, keine Zeitstempel und keine Verwaltungsfelder
+const plain = (obj, extra = []) => {
+  const o = { ...obj };
+  for (const k of ['_t', 'deleted', 'purged', 'replacedBy', ...extra]) delete o[k];
+  return o;
+};
+
+// Gerichte aus dem Papierkorb gehören nicht ins Backup. In einer Sammlung werden fehlende große Fotos
+// vorher vom Server geholt (ohne Verbindung kommt das Vorschaubild als Foto in die Datei).
 export async function buildExport() {
   const exportedAt = nowISO();
-  const [photos, thumbs, cooks] = await Promise.all([db.getAll('photos'), db.getAll('thumbs'), db.getAll('cooks')]);
-  const photoMap = new Map(photos.map(p => [p.id, p]));
-  const thumbMap = new Map(thumbs.map(t => [t.id, t]));
   const dishes = [...state.dishes.values()].sort(byName);
-  let photoCount = 0;
+  const thumbs = new Map((await db.getAll('thumbs')).map(t => [t.id, t]));
+  const photos = new Map();
+  for (const d of dishes) {
+    if (!photoVersion(d.id)) continue;
+    const full = (await fullPhoto(d.id)) || thumbs.get(d.id);
+    if (full) photos.set(d.id, full);
+  }
+  const cooks = dishes.flatMap(d => [...(state.cooks.get(d.id)?.values() || [])])
+    .map(c => ({ id: c.id, dishId: c.dishId, day: c.day, deleted: !!c.deleted, ts: c.ts }))
+    .sort((a, b) => a.id.localeCompare(b.id));
   const head = {
     format: FORMAT,
     formatVersion: FORMAT_VERSION,
     kind: 'backup',
     exportedAt,
     dataStand: state.meta.dataStand || exportedAt,
-    counts: { dishes: dishes.length, photos: dishes.filter(d => photoMap.has(d.id)).length },
-    methods: methodList(),
-    ingredients: [...state.ingredients.values()].sort(byName),
-    cooks: cooks.sort((a, b) => a.id.localeCompare(b.id)),
+    counts: { dishes: dishes.length, photos: photos.size },
+    methods: methodList().map(m => plain(m)),
+    ingredients: [...state.ingredients.values()].sort(byName).map(i => plain(i)),
+    cooks,
   };
   // Stückweise zusammensetzen, damit keine riesige Zeichenkette entsteht
   const parts = [JSON.stringify(head).slice(0, -1), ',\n"dishes":[\n'];
   dishes.forEach((d, i) => {
-    const out = { ...d };
-    if (photoMap.has(d.id)) {
-      out.photo = toDataUrl(photoMap.get(d.id));
-      if (thumbMap.has(d.id)) out.thumb = toDataUrl(thumbMap.get(d.id));
-      photoCount++;
+    const out = plain(d);
+    if (photos.has(d.id)) {
+      out.photo = toDataUrl(photos.get(d.id));
+      if (thumbs.has(d.id)) out.thumb = toDataUrl(thumbs.get(d.id));
     }
     parts.push((i ? ',\n' : '') + JSON.stringify(out));
   });
   parts.push('\n]}\n');
   const name = `Gerichte-${ymd(new Date())}.json`;
   const file = new File(parts, name, { type: 'application/json' });
-  return { file, name, size: file.size, exportedAt, dishCount: dishes.length, photoCount, changesAtExport: state.meta.changesSinceExport || 0 };
+  return { file, name, size: file.size, exportedAt, dishCount: dishes.length, photoCount: photos.size };
 }
 
 // ---------- Datei lesen ----------
@@ -231,16 +245,15 @@ export async function prepareReplace(json) {
   const errors = [];
   const fileCooks = readCooks(json, errors, exportedAt);
 
+  // Gleiche Namen sind erlaubt: Legen zwei Geräte ohne Internet dieselbe Zutat an, gibt es sie zweimal
+  // (zusammenführen über „Zutaten“).
   const ingredients = [];
   const ingIds = new Set();
-  const ingNames = new Set();
   (Array.isArray(json.ingredients) ? json.ingredients : []).forEach((r, i) => {
     const err = m => errors.push(`Zutat ${i + 1}: ${m}`);
     if (!r || !isNonEmptyString(r.id) || !isNonEmptyString(r.name)) return err('ID oder Name fehlt');
     if (ingIds.has(r.id)) return err('ID doppelt');
-    if (ingNames.has(nameKey(r.name))) return err(`„${r.name}“ doppelt`);
     ingIds.add(r.id);
-    ingNames.add(nameKey(r.name));
     ingredients.push({ ...r, name: cleanName(r.name) });
   });
 

@@ -2,10 +2,12 @@
 // Fotos werden als ArrayBuffer gespeichert (zuverlässiger als Blobs in älteren iOS-Versionen).
 
 const DB_NAME = 'gerichte';
-const DB_VERSION = 2; // 2 = Kochtage als eigene Einträge ("cooks", seit 1.5.0)
+// 2 = Kochtage als eigene Einträge ("cooks", seit 1.5.0)
+// 3 = Abgleich (2.0.0): Foto-Stand je Gericht ("photostate"), gemeinsame Angaben ("shared"), Warteschlange ("queue")
+const DB_VERSION = 3;
 
-// Datenbestände, die ein Import komplett ersetzt. "meta" (Gerätetyp, Exportstand …) bleibt.
-export const DATA_STORES = ['dishes', 'ingredients', 'methods', 'photos', 'thumbs', 'cooks'];
+// Datenbestände, die ein Import komplett ersetzt. "meta" (Gerätetyp, Abgleich …) und "queue" bleiben.
+export const DATA_STORES = ['dishes', 'ingredients', 'methods', 'photos', 'thumbs', 'cooks', 'photostate', 'shared'];
 
 let dbPromise;
 
@@ -19,6 +21,7 @@ export function openDB() {
           if (!db.objectStoreNames.contains(name)) db.createObjectStore(name, { keyPath: 'id' });
         }
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta', { keyPath: 'key' });
+        if (!db.objectStoreNames.contains('queue')) db.createObjectStore('queue', { keyPath: 'key' });
       };
       req.onsuccess = () => {
         const db = req.result;

@@ -1,6 +1,6 @@
 // Gericht anlegen und bearbeiten (nur Hauptgerät).
 
-import { state, blankDish, saveDish, deleteDish, ingName, ingredientUsage, tagUsage, methodList, findDishByName, EFFORT, DIETS, OPTIONS } from './store.js';
+import { state, blankDish, saveDish, deleteDish, ingName, ingredientUsage, tagUsage, methodList, findDishByName, EFFORT, DIETS, OPTIONS, TRASH_DAYS } from './store.js';
 import { processPhoto } from './photo.js';
 import { esc, $, $$, cleanName, capFirst, nameKey, fold } from './util.js';
 import { openPage, confirmSheet, toast, showError, emitChange } from './ui.js';
@@ -171,7 +171,7 @@ export function openEdit(id, { onSaved } = {}) {
     const btn = $('#fSave', page.el);
     btn.disabled = true;
     try {
-      const { dish: saved, changed } = await saveDish(draft, ings, photo === undefined ? undefined : photo && { full: photo.full, thumb: photo.thumb });
+      const { dish: saved, changed } = await saveDish(draft, ings, photo === undefined ? undefined : photo && { full: photo.full, thumb: photo.thumb }, isNew ? null : orig);
       dirty = false;
       if (!onSaved) page.close(); // sonst öffnet onSaved die nächste Seite an ihrer Stelle (siehe app.js)
       if (changed) emitChange();
@@ -184,14 +184,19 @@ export function openEdit(id, { onSaved } = {}) {
   }
 
   async function remove() {
-    const ok = await confirmSheet({ title: 'Gericht löschen?', text: `„${esc(orig.name)}“ wird endgültig gelöscht.`, ok: 'Löschen', danger: true });
+    const ok = await confirmSheet({
+      title: 'Gericht löschen?',
+      text: `„${esc(orig.name)}“ kommt in „Zuletzt gelöscht“ (Einstellungen) und lässt sich dort ${TRASH_DAYS} Tage lang zurückholen.`,
+      ok: 'Löschen',
+      danger: true,
+    });
     if (!ok) return;
     try {
-      await deleteDish(orig.id);
+      const undo = await deleteDish(orig.id);
       dirty = false;
       page.close();
       emitChange();
-      toast(`„${orig.name}“ gelöscht.`);
+      toast(`„${orig.name}“ gelöscht.`, { action: 'Rückgängig', onAction: () => undo().then(emitChange).catch(showError) });
     } catch (err) { showError(err); }
   }
 

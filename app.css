@@ -448,6 +448,30 @@ textarea.input { min-height: 96px; resize: vertical; line-height: 1.4; }
 .welcome .choice span { color: var(--text-2); font-size: 15px; }
 .welcome .error-box { margin-top: 20px; }
 
+/* ---------- Abgleich ---------- */
+
+/* Symbol oben neben dem Titel: grün = alles abgeglichen, grau = wird gesendet/keine Verbindung, rot = Problem */
+.sync-btn {
+  flex: none; width: 40px; height: 40px; border-radius: 50%; padding: 0; color: var(--text-2);
+  display: inline-flex; align-items: center; justify-content: center;
+}
+.sync-btn.ok, .sync-line.ok .ico { color: var(--tint); }
+.sync-btn.alert, .sync-line.alert .ico { color: var(--danger); }
+.sync-line { display: flex; align-items: center; gap: 10px; }
+.sync-line .ico { flex: none; color: var(--text-2); }
+.invite-code {
+  font: 600 38px/1.15 ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .08em; text-align: center;
+  margin: 14px 0 4px; -webkit-user-select: all; user-select: all;
+}
+.invite-steps { margin: 12px 0 0; padding-left: 22px; color: var(--text-2); font-size: 15px; }
+.invite-steps li { margin: 4px 0; }
+.code-input { font: 600 26px ui-monospace, "SF Mono", Menlo, monospace; letter-spacing: .12em; text-align: center; text-transform: uppercase; }
+.device-row, .trash-row { padding-top: 10px; padding-bottom: 10px; }
+.device-row .sub, .trash-row .sub { display: block; color: var(--text-2); font-size: 13px; margin-top: 2px; }
+.device-row .dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--switch-on); margin-left: auto; }
+.trash-row .btn { flex: none; min-height: 36px; padding: 0 14px; font-size: 15px; margin-left: auto; }
+.trash-row .thumb { flex: none; width: 44px; height: 44px; border-radius: 10px; font-size: 18px; }
+
 /* ---------- Hinweise ---------- */
 
 #toasts {

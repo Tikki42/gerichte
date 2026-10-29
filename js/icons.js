@@ -20,4 +20,14 @@ export const icon = {
   camera: (s) => svg('<path d="M4 8.5A2 2 0 0 1 6 6.5h2l1.5-2h5l1.5 2h2a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z" stroke-width="2"/><circle cx="12" cy="12.5" r="3.4" stroke-width="2"/>', s),
   sort: (s) => svg('<path d="M8 5v14M8 5L5 8M8 5l3 3M16 19V5M16 19l-3-3M16 19l3-3" stroke-width="2"/>', s),
   file: (s) => svg('<path d="M7 3.5h6.5L18 8v11.5a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-15a1 1 0 0 1 1-1z" stroke-width="2"/><path d="M13 3.5V8.5h5" stroke-width="2"/>', s),
+  // Abgleich: Wolke mit Haken (alles abgeglichen), Pfeil (wird gesendet), Strich (keine Verbindung), Ausrufezeichen
+  cloudOk: (s) => svg(`${CLOUD}<path d="M9.4 14.6l1.9 1.9 3.5-3.7" stroke-width="2"/>`, s),
+  cloudUp: (s) => svg(`${CLOUD}<path d="M12 17v-5.2M9.7 14l2.3-2.3 2.3 2.3" stroke-width="2"/>`, s),
+  cloudOff: (s) => svg(`${CLOUD}<path d="M4.5 4.5l15 15" stroke-width="2"/>`, s),
+  cloudAlert: (s) => svg(`${CLOUD}<path d="M12 11.3v3M12 17v.2" stroke-width="2.2"/>`, s),
+  devices: (s) => svg('<rect x="3" y="5" width="12.5" height="10" rx="2" stroke-width="2"/><path d="M6 19h6.5" stroke-width="2"/><rect x="15.5" y="9" width="5.5" height="10.5" rx="1.6" stroke-width="2"/>', s),
+  trash: (s) => svg('<path d="M4.5 7h15M9.5 7V4.8h5V7M6.5 7l.9 12.2a1.5 1.5 0 0 0 1.5 1.3h6.2a1.5 1.5 0 0 0 1.5-1.3L17.5 7" stroke-width="2"/>', s),
 };
+
+// Umriss der Wolke für die Abgleich-Symbole
+const CLOUD = '<path d="M7.3 19.5h9.9a4.3 4.3 0 0 0 .7-8.55 6 6 0 0 0-11.6-1.2A4.9 4.9 0 0 0 7.3 19.5z" stroke-width="2"/>';

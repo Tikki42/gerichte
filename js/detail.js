@@ -1,6 +1,6 @@
 // Detailansicht eines Gerichts.
 
-import { state, isMain, ingName, photoUrl, markCooked, setFavorite, cookDays, removeCookDays, EFFORT, DIET_LABEL, OPTIONS } from './store.js';
+import { state, canEdit, ingName, photoUrl, markCooked, setFavorite, cookDays, removeCookDays, EFFORT, DIET_LABEL, OPTIONS } from './store.js';
 import { esc, $, fmtDate, relDays, todayYMD, weekdayShort, plural } from './util.js';
 import { openPage, toast, showError, emitChange } from './ui.js';
 import { openEdit } from './edit.js';
@@ -27,8 +27,8 @@ export function openDetail(id, { replace = false } = {}) {
 
   async function render() {
     const d = state.dishes.get(id);
-    if (!d) return page.close();
-    const main = isMain();
+    if (!d) return page.close(); // z. B. auf einem anderen Gerät gelöscht
+    const main = canEdit();
     const methods = d.methodIds.map(m => state.methods.get(m)).filter(Boolean);
     const options = OPTIONS.filter(([k]) => d[k]).map(([, l]) => l);
     const link = /^https?:\/\//i.test(d.link || '') ? d.link : '';

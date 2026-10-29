@@ -1,8 +1,10 @@
-// Einstellungen: Gerätetyp, Export, Import, Gerichte hinzufügen, Speicher, Version.
+// Einstellungen: Abgleich, Export, Import, Gerichte hinzufügen, Listen, Speicher, Version.
 
-import { state, isMain, setMeta } from './store.js';
+import { state, canEdit, isSynced, setMeta, lastExport, exportDue, noteExport, EXPORT_REMIND_DAYS } from './store.js';
 import { buildExport, readJsonFile, prepareReplace, commitReplace, prepareAdd, commitAdd } from './io.js';
 import { checkForUpdate, appVersion } from './pwa.js';
+import { syncStatus, onSyncStatus } from './sync.js';
+import { statusInfo, openCreateSheet, openJoinSheet, openInviteSheet, openDevices, openTrash, confirmLeave } from './syncui.js';
 import { esc, $, fmtDateTime, fmtDate, fmtBytes, plural, isStandalone } from './util.js';
 import { openPage, openSheet, confirmSheet, toast, showError, emitChange } from './ui.js';
 import { openIngredients, openMethods } from './manage.js';
@@ -11,15 +13,56 @@ import { icon } from './icons.js';
 export function openSettings({ focus } = {}) {
   let prepared = null; // vorbereitete Exportdatei
   const onChange = () => render();
-  const page = openPage({ title: 'Einstellungen', onClose: () => document.removeEventListener('data-changed', onChange) });
+  const offStatus = onSyncStatus(() => renderSyncLine());
+  const page = openPage({
+    title: 'Einstellungen',
+    onClose: () => {
+      document.removeEventListener('data-changed', onChange);
+      offStatus();
+    },
+  });
   document.addEventListener('data-changed', onChange);
 
+  function syncHtml() {
+    if (isSynced()) {
+      const s = statusInfo();
+      return `
+        <div class="section"><h3>Abgleich</h3><div class="box">
+          <p class="sync-line ${s.cls}" id="syncLine">${s.icon(22)}<b>${esc(s.text)}</b></p>
+          <p class="muted">Dieses Gerät: <b>${esc(state.meta.sync.name)}</b></p>
+          <button class="btn primary" data-invite>Gerät einladen …</button>
+          <p class="hint">Zeigt einen Code, mit dem ein weiteres Gerät der Sammlung beitritt.</p>
+        </div>
+        <div class="menu" style="margin-top:12px"><button class="menu-item" data-devices>Geräte</button></div>
+        <button class="btn danger full" data-leave style="margin-top:12px">Abgleich beenden …</button></div>`;
+    }
+    const reader = state.meta.deviceType === 'reader';
+    return `
+      <div class="section"><h3>Abgleich</h3><div class="box">
+        <p>${reader
+          ? 'Dieses Gerät ist ein Lesegerät, die Daten kommen als Datei. Mit dem Abgleich habt ihr auf allen Geräten sofort denselben Stand und dürft alle bearbeiten.'
+          : 'Die Gerichte liegen nur auf diesem Gerät.'}</p>
+        ${reader ? '' : `<button class="btn primary" data-create>Neue Sammlung anlegen …</button>
+          <p class="hint">Für das erste Gerät: Seine Gerichte werden die gemeinsame Sammlung.</p>`}
+        <button class="btn ${reader ? 'primary' : 'tinted'}" data-join ${reader ? '' : 'style="margin-top:14px"'}>Mit Code beitreten …</button>
+        <p class="hint">Ein anderes Gerät zeigt unter „Gerät einladen“ einen Code. Die Gerichte hier werden dann durch die gemeinsame Sammlung ersetzt.</p>
+        ${reader ? '<button class="link-btn" data-local style="margin-top:8px">Stattdessen nur auf diesem Gerät nutzen</button>' : ''}
+      </div></div>`;
+  }
+
+  function renderSyncLine() {
+    const el = $('#syncLine', page.el);
+    if (!el) return;
+    const s = statusInfo();
+    el.className = `sync-line ${s.cls}`;
+    el.innerHTML = `${s.icon(22)}<b>${esc(s.text)}</b>`;
+  }
+
   function exportHtml() {
-    const m = state.meta;
-    const changes = m.changesSinceExport || 0;
-    const status = changes > 0
-      ? `<p class="bad">⚠︎ ${plural(changes, 'Änderung', 'Änderungen')} seit dem letzten Export</p>`
-      : m.lastExportAt ? '<p class="ok">✓ Alles exportiert</p>' : '';
+    const last = lastExport();
+    const status = exportDue()
+      ? `<p class="bad">⚠︎ ${last ? `Letzter Export vor über ${EXPORT_REMIND_DAYS} Tagen` : 'Noch nicht exportiert'}</p>`
+      : last ? '<p class="ok">✓ Gesichert</p>' : '';
     const step = prepared
       ? `<p>Datei bereit: <b>${esc(prepared.name)}</b><br>
            <span class="muted">${plural(prepared.dishCount, 'Gericht', 'Gerichte')}, ${plural(prepared.photoCount, 'Foto', 'Fotos')} · ${fmtBytes(prepared.size)}</span></p>
@@ -29,42 +72,38 @@ export function openSettings({ focus } = {}) {
       : '<button class="btn primary" data-prepare>1. Exportdatei vorbereiten</button>';
     return `
       <div class="section" id="secExport"><h3>Export = Backup</h3><div class="box">
-        <p>Letzter Export: <b>${m.lastExportAt ? fmtDateTime(m.lastExportAt) : 'noch nie'}</b></p>
+        <p>Letzter Export: <b>${last ? fmtDateTime(last.at) : 'noch nie'}</b>${last?.by ? ` <span class="muted">von ${esc(last.by)}</span>` : ''}</p>
         ${status}
         ${step}
+        <p class="hint">Die App erinnert, wenn der letzte Export länger als ${EXPORT_REMIND_DAYS} Tage zurückliegt${isSynced() ? '. Ein Export gilt für die ganze Sammlung' : ''}.</p>
       </div></div>`;
   }
 
   function render() {
-    const main = isMain();
+    const edit = canEdit();
+    const reader = state.meta.deviceType === 'reader';
     const m = state.meta;
     page.body.innerHTML = `
-      <div class="section"><h3>Dieses iPhone ist …</h3><div class="box">
-        <div class="segmented">
-          <button data-dev="main" class="${main ? 'on' : ''}">Hauptgerät</button>
-          <button data-dev="reader" class="${main ? '' : 'on'}">Lesegerät</button>
-        </div>
-        <p class="hint">${main
-          ? 'Alle Funktionen: anlegen, bearbeiten, exportieren.'
-          : 'Nur lesen: suchen, filtern, Zufall. Die Daten kommen als Datei vom Hauptgerät.'}</p>
-      </div></div>
+      ${syncHtml()}
 
-      ${main ? exportHtml() : ''}
+      ${edit ? exportHtml() : ''}
 
-      <div class="section"><h3>${main ? 'Import' : 'Daten'}</h3><div class="box">
-        ${main ? '' : `<p>Stand: <b>${m.lastImport ? fmtDate(m.dataStand) : 'noch keine Daten'}</b>
-            ${m.lastImport ? `<br><span class="muted">geladen am ${fmtDateTime(m.lastImport.at)}</span>` : ''}</p>`}
-        ${main ? `
+      <div class="section"><h3>${reader ? 'Daten' : 'Import'}</h3><div class="box">
+        ${reader ? `<p>Stand: <b>${m.lastImport ? fmtDate(m.dataStand) : 'noch keine Daten'}</b>
+            ${m.lastImport ? `<br><span class="muted">geladen am ${fmtDateTime(m.lastImport.at)}</span>` : ''}</p>
+          <button class="btn primary" data-replace>Daten aktualisieren …</button>` : `
           <button class="btn tinted" data-add>Gerichte hinzufügen …</button>
           <p class="hint">Übernimmt aus einer Datei nur Gerichte, die noch fehlen.</p>
           <button class="btn tinted" data-replace style="margin-top:14px">Backup wiederherstellen …</button>
-          <p class="hint">Ersetzt alle Gerichte durch den Stand aus einer Exportdatei.</p>`
-        : '<button class="btn primary" data-replace>Daten aktualisieren …</button>'}
+          <p class="hint">${isSynced()
+            ? 'Ersetzt die Gerichte auf allen Geräten der Sammlung durch den Stand aus einer Exportdatei.'
+            : 'Ersetzt alle Gerichte durch den Stand aus einer Exportdatei.'}</p>`}
       </div></div>
 
-      ${main ? `<div class="section"><h3>Listen pflegen</h3><div class="menu">
+      ${edit ? `<div class="section"><h3>Listen pflegen</h3><div class="menu">
         <button class="menu-item" data-ings>Zutaten <small>${state.ingredients.size}</small></button>
         <button class="menu-item" data-methods>Zubereitungsarten <small>${state.methods.size}</small></button>
+        <button class="menu-item" data-trash>Zuletzt gelöscht <small>${state.trash.size}</small></button>
       </div></div>` : ''}
 
       <div class="section"><h3>Speicher</h3><div class="box" id="storage"><p class="muted">Prüfe …</p></div></div>
@@ -98,8 +137,7 @@ export function openSettings({ focus } = {}) {
   // ---------- Export ----------
 
   async function markExported() {
-    const rest = Math.max(0, (state.meta.changesSinceExport || 0) - prepared.changesAtExport);
-    await setMeta({ lastExportAt: prepared.exportedAt, changesSinceExport: rest });
+    await noteExport(prepared.exportedAt, isSynced() ? state.meta.sync.name : null);
     emitChange();
   }
 
@@ -133,14 +171,15 @@ export function openSettings({ focus } = {}) {
     if (!b) return;
     const d = b.dataset;
     try {
-      if (d.dev && d.dev !== state.meta.deviceType) {
-        const toMain = d.dev === 'main';
-        const ok = await confirmSheet(toMain
-          ? { title: 'Zum Hauptgerät machen?', text: 'Nur ein iPhone sollte das Hauptgerät sein – sonst überschreibt ihr euch gegenseitig Änderungen.', ok: 'Hauptgerät' }
-          : { title: 'Zum Lesegerät machen?', text: 'Anlegen und Bearbeiten werden ausgeblendet. Die Daten bleiben erhalten.', ok: 'Lesegerät' });
+      if (d.create !== undefined) openCreateSheet({ onDone: render });
+      if (d.join !== undefined) openJoinSheet({ onDone: render });
+      if (d.invite !== undefined) openInviteSheet();
+      if (d.devices !== undefined) openDevices();
+      if (d.leave !== undefined && (await confirmLeave())) render();
+      if (d.local !== undefined) {
+        const ok = await confirmSheet({ title: 'Nur auf diesem Gerät nutzen?', text: 'Anlegen und Bearbeiten werden eingeblendet. Die Daten bleiben erhalten, abgeglichen wird nichts.', ok: 'Ja, nur hier' });
         if (!ok) return;
-        await setMeta({ deviceType: d.dev });
-        prepared = null;
+        await setMeta({ deviceType: 'main' });
         emitChange();
       }
       if (d.prepare !== undefined) {
@@ -155,6 +194,7 @@ export function openSettings({ focus } = {}) {
       if (d.add !== undefined) openImport('add');
       if (d.ings !== undefined) openIngredients();
       if (d.methods !== undefined) openMethods();
+      if (d.trash !== undefined) openTrash();
       if (d.persist !== undefined) {
         try { await navigator.storage.persist(); } catch { /* egal */ }
         renderStorage(true);
@@ -178,13 +218,16 @@ export function openSettings({ focus } = {}) {
 // ---------- Import (ersetzen) und Gerichte hinzufügen ----------
 
 export function openImport(mode) {
-  const main = isMain();
-  const title = mode === 'add' ? 'Gerichte hinzufügen' : main ? 'Backup wiederherstellen' : 'Daten aktualisieren';
+  const reader = state.meta.deviceType === 'reader';
+  const synced = isSynced();
+  const title = mode === 'add' ? 'Gerichte hinzufügen' : reader ? 'Daten aktualisieren' : 'Backup wiederherstellen';
   const intro = mode === 'add'
     ? 'Wähle eine Datei mit Gerichten. Übernommen werden nur Gerichte, die es noch nicht gibt (gleicher Name oder gleiche ID wird übersprungen).'
-    : main
-      ? 'Wähle eine Exportdatei. Nach einer Vorschau wird der komplette Bestand auf diesem iPhone durch die Datei ersetzt.'
-      : 'Wähle die neueste Datei aus eurem geteilten iCloud-Ordner (z. B. „Gerichte-2026-10-24.json“). Nach einer Vorschau wird der Stand ersetzt.';
+    : reader
+      ? 'Wähle die neueste Datei aus eurem geteilten iCloud-Ordner (z. B. „Gerichte-2026-10-24.json“). Nach einer Vorschau wird der Stand ersetzt.'
+      : synced
+        ? 'Wähle eine Exportdatei. Nach einer Vorschau wird der Stand auf allen Geräten der Sammlung ersetzt. Gerichte, die nicht in der Datei stehen, kommen in „Zuletzt gelöscht“.'
+        : 'Wähle eine Exportdatei. Nach einer Vorschau wird der komplette Bestand auf diesem Gerät durch die Datei ersetzt.';
   const s = openSheet({
     title,
     body: `
@@ -217,19 +260,18 @@ export function openImport(mode) {
   });
 
   function previewReplace() {
-    const changes = main ? state.meta.changesSinceExport || 0 : 0;
     out.innerHTML = `
       <div class="box result-box">
         <p><b>${esc(fileName)}</b></p>
         <p>Exportiert am: <b>${fmtDateTime(plan.exportedAt)}</b></p>
         <p>Enthält: <b>${plural(plan.dishCount, 'Gericht', 'Gerichte')}</b>, ${plural(plan.photoCount, 'Foto', 'Fotos')}</p>
-        <p class="muted">Ersetzt die ${plural(state.dishes.size, 'Gericht', 'Gerichte')} auf diesem iPhone vollständig.</p>
+        <p class="muted">Ersetzt die ${plural(state.dishes.size, 'Gericht', 'Gerichte')} ${synced ? 'auf allen Geräten der Sammlung' : 'auf diesem Gerät'} vollständig.</p>
       </div>
-      ${plan.older ? `<div class="error-box">⚠︎ <b>Diese Datei ist älter als der aktuelle Stand</b> auf diesem iPhone
-        (${fmtDateTime(state.meta.dataStand)}). Neuere Änderungen gehen beim Ersetzen verloren.</div>` : ''}
-      ${changes ? `<div class="error-box">⚠︎ Es gibt ${plural(changes, 'Änderung', 'Änderungen')}, die noch nicht exportiert wurden. Sie gehen verloren.</div>` : ''}`;
+      ${synced ? '<div class="error-box">⚠︎ <b>Das betrifft alle Geräte der Sammlung.</b> Änderungen seit dem Export gehen dort ebenfalls verloren.</div>' : ''}
+      ${plan.older ? `<div class="error-box">⚠︎ <b>Diese Datei ist älter als der aktuelle Stand</b>
+        (${fmtDateTime(state.meta.dataStand)}). Neuere Änderungen gehen beim Ersetzen verloren.</div>` : ''}`;
     s.setFoot(`<button class="btn grow" data-cancel>Abbrechen</button>
-      <button class="btn grow ${plan.older || changes ? 'danger-fill' : 'primary'}" data-go>Jetzt ersetzen</button>`);
+      <button class="btn grow ${plan.older || synced ? 'danger-fill' : 'primary'}" data-go>Jetzt ersetzen</button>`);
   }
 
   function previewAdd() {
@@ -254,6 +296,10 @@ export function openImport(mode) {
     if (e.target.closest('[data-cancel]')) return s.close();
     const go = e.target.closest('[data-go]');
     if (!go || !plan) return;
+    // In einer Sammlung nur mit aktuellem Stand ersetzen, sonst blieben Gerichte anderer Geräte übrig
+    if (mode !== 'add' && synced && syncStatus().state !== 'online') {
+      return showError(new Error('Dafür muss dieses Gerät mit dem Server verbunden und abgeglichen sein. Bitte mit Internet erneut versuchen.'), 'Gerade nicht möglich.');
+    }
     go.disabled = true;
     go.textContent = 'Speichere …';
     try {
