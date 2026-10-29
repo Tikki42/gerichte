@@ -89,7 +89,7 @@ export function openDetail(id, { replace = false } = {}) {
       <h3 class="cook-head">Gekocht am</h3>
       <div class="list-box">${shown.map(day => `<div class="list-row cook-row">
         <span>${weekdayShort(day)}, ${fmtDate(day)}</span><span class="when">${relDays(day)}</span>
-        ${main ? `<button class="close-btn" data-rm-day="${day}" aria-label="Kochtag ${fmtDate(day)} löschen">${icon.close(14)}</button>` : ''}
+        ${main ? `<button class="close-btn" data-rm-day="${esc(day)}" aria-label="Kochtag ${fmtDate(day)} löschen">${icon.close(14)}</button>` : ''}
       </div>`).join('')}</div>
       ${days.length > shown.length ? `<button class="link-btn more-days" data-all-days>Alle ${days.length} Kochtage anzeigen</button>` : ''}
       ${base ? `<p class="hint">Dazu ${plural(base, 'früheres Mal', 'frühere Male')} ohne Datum.</p>` : ''}`;

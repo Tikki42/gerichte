@@ -101,3 +101,47 @@ export function checkRec(rec, { needTs = true } = {}) {
   if (JSON.stringify(rec).length > MAX_REC_BYTES) return 'Datensatz zu groß';
   return null;
 }
+
+// ---------- Datensätze vom Server prüfen (seit 2.0.2) ----------
+// Die App übernimmt nicht blind, was der Server schickt: Ein fehlerhafter Datensatz (eine Zahl, wo eine Liste stehen
+// muss, ein Kochtag ohne Datum …) darf die App weder lahmlegen noch Text einschleusen. Felder mit falscher Art
+// werden weggelassen (null ist immer erlaubt: entfernte Felder werden null), unbekannte Felder bleiben unverändert.
+
+const isStr = v => typeof v === 'string';
+const isBool = v => typeof v === 'boolean';
+const isNum = v => typeof v === 'number' && Number.isFinite(v);
+const isStrList = v => Array.isArray(v) && v.every(isStr);
+const isVersion = v => isStr(v) && /^[\w-]{1,64}$/.test(v); // Foto-Version steckt in einer Server-Adresse
+
+const FIELD_TYPES = {
+  dish: {
+    name: isStr, ingredientIds: isStrList, methodIds: isStrList, tags: isStrList, note: isStr, link: isStr, diet: isStr,
+    effort: isNum, cookCountBase: isNum, quick: isBool, mealPrep: isBool, cold: isBool, meatOptional: isBool,
+    favorite: isBool, createdAt: isStr, deleted: isStr, purged: isBool,
+  },
+  ing: { name: isStr, replacedBy: isStr, createdAt: isStr, deleted: isStr, purged: isBool },
+  method: { name: isStr, icon: isStr, order: isNum, createdAt: isStr, deleted: isStr, purged: isBool },
+  cook: { deleted: isBool, purged: isBool },
+  photo: { v: isVersion, purged: isBool },
+  info: { at: isStr, by: isStr, purged: isBool },
+};
+
+export const COOK_ID_RE = /^.+\|\d{4}-\d{2}-\d{2}$/; // Kochtag: "Gericht-ID|JJJJ-MM-TT"
+
+// Ergebnis: bereinigter Datensatz { key, f, t } oder null (ganz verwerfen)
+export function cleanRec(rec) {
+  if (!isObj(rec) || !isStr(rec.key) || !KEY_RE.test(rec.key) || !isObj(rec.f)) return null;
+  const [kind, id] = splitKey(rec.key);
+  if (kind === 'cook' && !COOK_ID_RE.test(id)) return null;
+  const types = FIELD_TYPES[kind] || {};
+  const times = isObj(rec.t) ? rec.t : {};
+  const f = {};
+  const t = {};
+  for (const [k, v] of Object.entries(rec.f)) {
+    if (k === '__proto__') continue;
+    if (v !== null && Object.prototype.hasOwnProperty.call(types, k) && !types[k](v)) continue;
+    f[k] = v;
+    if (isStr(times[k]) && TS_RE.test(times[k])) t[k] = times[k];
+  }
+  return { key: rec.key, f, t };
+}

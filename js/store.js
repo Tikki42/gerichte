@@ -8,7 +8,7 @@
 // Alles wird zuerst in IndexedDB gespeichert und erst danach im Speicher übernommen.
 
 import * as db from './db.js';
-import { makeClock, mergeRec, keyOf, splitKey, tsMs } from './sync-core.js';
+import { makeClock, mergeRec, cleanRec, keyOf, splitKey, tsMs } from './sync-core.js';
 import { uuid, todayYMD, isYMD, cleanName, capFirst, nameKey } from './util.js';
 
 export const DEFAULT_METHODS = [
@@ -223,32 +223,39 @@ function lastChange(obj) {
   return ts ? isoOfTs(ts) : obj.updatedAt || obj.createdAt || null;
 }
 
+// Nur Texte zählen: Ein fehlerhafter Datensatz soll die Sicht nicht zerstören (die App käme sonst nicht mehr hoch)
+const onlyTexts = v => (Array.isArray(v) ? v.filter(x => typeof x === 'string') : []);
+
 function rebuild() {
   const resolve = resolver();
   const cooks = new Map();
   for (const c of raw.cooks.values()) {
-    if (c.purged) continue;
+    if (c.purged || typeof c.dishId !== 'string' || !isYMD(c.day)) continue; // ohne gültigen Tag zählt ein Eintrag nicht
     if (!cooks.has(c.dishId)) cooks.set(c.dishId, new Map());
     cooks.get(c.dishId).set(c.day, c);
   }
   const dishes = new Map();
   const trash = new Map();
   for (const d of raw.dishes.values()) {
-    if (d.purged) continue;
-    const ingredientIds = [];
-    for (const x of d.ingredientIds || []) {
-      const y = resolve(x);
-      if (!ingredientIds.includes(y)) ingredientIds.push(y);
+    if (d.purged || typeof d.name !== 'string') continue;
+    try {
+      const ingredientIds = [];
+      for (const x of onlyTexts(d.ingredientIds)) {
+        const y = resolve(x);
+        if (!ingredientIds.includes(y)) ingredientIds.push(y);
+      }
+      const view = {
+        ...viewOf(d),
+        ingredientIds,
+        methodIds: onlyTexts(d.methodIds),
+        tags: onlyTexts(d.tags),
+        updatedAt: lastChange(d),
+      };
+      Object.assign(view, derivedCookFields(view, cooks.get(d.id)));
+      (d.deleted ? trash : dishes).set(d.id, view);
+    } catch (e) {
+      console.warn('Gericht übersprungen:', d.id, e); // lieber ein Gericht weniger als eine App, die nicht startet
     }
-    const view = {
-      ...viewOf(d),
-      ingredientIds,
-      methodIds: [...(d.methodIds || [])],
-      tags: [...(d.tags || [])],
-      updatedAt: lastChange(d),
-    };
-    Object.assign(view, derivedCookFields(view, cooks.get(d.id)));
-    (d.deleted ? trash : dishes).set(d.id, view);
   }
   const usedIngs = new Set();
   const usedMethods = new Set();
@@ -257,8 +264,9 @@ function rebuild() {
     d.methodIds.forEach(id => usedMethods.add(id));
   }
   state.ingredients = new Map([...raw.ingredients.values()]
-    .filter(i => (!i.deleted && !i.replacedBy) || usedIngs.has(i.id)).map(i => [i.id, viewOf(i)]));
-  state.methods = new Map([...raw.methods.values()].filter(m => !m.deleted || usedMethods.has(m.id)).map(m => [m.id, viewOf(m)]));
+    .filter(i => typeof i.name === 'string' && ((!i.deleted && !i.replacedBy) || usedIngs.has(i.id))).map(i => [i.id, viewOf(i)]));
+  state.methods = new Map([...raw.methods.values()]
+    .filter(m => typeof m.name === 'string' && (!m.deleted || usedMethods.has(m.id))).map(m => [m.id, viewOf(m)]));
   state.dishes = dishes;
   state.trash = trash;
   state.cooks = cooks;
@@ -829,11 +837,14 @@ async function leaveSyncNow() {
 // Gibt die Gerichte zurück, deren Foto sich geändert hat.
 async function applyRemoteNow(recs, cursor) {
   const touched = new Map();
-  for (const rec of recs) {
+  for (const incoming of Array.isArray(recs) ? recs : []) {
+    // Vom Server kommt nichts ungeprüft in den Speicher (cleanRec in js/sync-core.js)
+    const rec = cleanRec(incoming);
+    if (!rec) continue;
     const [kind, id] = splitKey(rec.key);
     const store = STORES[kind];
     if (!store) continue;
-    for (const ts of Object.values(rec.t || {})) clock.see(ts);
+    for (const ts of Object.values(rec.t)) clock.see(ts);
     const prev = touched.get(rec.key)?.obj ?? raw[store].get(id);
     const m = mergeRec(prev && toRec(store, prev), rec);
     if (m.changed) touched.set(rec.key, { store, obj: fromRec(store, id, m.f, m.t, prev) });

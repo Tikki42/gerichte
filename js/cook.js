@@ -28,10 +28,10 @@ export function openCookSheet(dishId) {
   const render = () => {
     $('#cookDays', s.el).innerHTML = recent.map((day, i) => (done.has(day)
       ? `<button type="button" class="day-chip" disabled><b>${dayName(day, i)}</b><small>${icon.check(13)} eingetragen</small></button>`
-      : `<button type="button" class="day-chip ${picked.has(day) ? 'on' : ''}" data-day="${day}"><b>${dayName(day, i)}</b><small>${fmtShort(day)}</small></button>`)).join('');
+      : `<button type="button" class="day-chip ${picked.has(day) ? 'on' : ''}" data-day="${esc(day)}"><b>${dayName(day, i)}</b><small>${fmtShort(day)}</small></button>`)).join('');
     const older = [...picked].filter(day => !recent.includes(day)).sort().reverse();
     $('#cookExtra', s.el).innerHTML = older.map(day =>
-      `<button type="button" class="chip on" data-day="${day}">${weekdayShort(day)} ${fmtShort(day)} <span class="x">×</span></button>`).join('');
+      `<button type="button" class="chip on" data-day="${esc(day)}">${weekdayShort(day)} ${fmtShort(day)} <span class="x">×</span></button>`).join('');
     const n = picked.size;
     s.setFoot(`<button class="btn primary grow" data-save ${n ? '' : 'disabled'}>${n ? `${plural(n, 'Tag', 'Tage')} eintragen` : 'Tage antippen'}</button>`);
   };

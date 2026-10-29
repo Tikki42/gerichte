@@ -161,6 +161,14 @@ Die App erinnert an einen Export, wenn der letzte länger als 30 Tage zurücklie
   Einladungscodes haben 8 Zeichen, gelten 15 Minuten und einmal; Fehlversuche sind begrenzt. Ein entferntes Gerät
   wird sofort getrennt und arbeitet mit seiner Kopie allein weiter. Geht das letzte Gerät, wird die Sammlung auf dem
   Server gelöscht. Angenommen werden nur Anfragen von der App-Adresse und vom lokalen Test (`ALLOWED_ORIGINS`).
+- **Server-Daten werden geprüft (seit 2.0.2):** Die App vertraut nicht blind, was der Server schickt (die
+  Herkunftsprüfung ist kein Schutz, ein Skript kann sie fälschen). `cleanRec` in `js/sync-core.js` bereinigt jeden
+  Datensatz, bevor er gespeichert wird: Felder mit falscher Art (z. B. eine Zahl statt einer Liste) fallen weg, ein
+  Kochtag ohne Datum im Schlüssel, ein ungültiger Schlüssel oder eine Foto-Version mit Sonderzeichen werden verworfen,
+  unbekannte Felder gehen unverändert durch. Neue Felder gehören in `FIELD_TYPES`. Dazu überspringt `rebuild()` in
+  `js/store.js` Einträge ohne Namen oder Datum, damit ein fehlerhafter Datensatz die App nie lahmlegt. Der Server
+  selbst (`checkRec`) prüft weiterhin nur Schlüssel, Zeitstempel und Größe. Jeder Text, der in die Seite eingesetzt
+  wird, läuft durch `esc()` (auch Kochtage in Attributen).
 - **Protokollversion** `PROTO` in `js/sync-core.js` steckt in jeder Adresse (`/api/1/…`). Ältere Apps weist der Server
   mit „Bitte die App aktualisieren“ ab (`MIN_PROTO` in `server/src/index.js`).
 - **Server veröffentlichen** (Node.js liegt in `~/.local/node`, nicht im PATH):
@@ -207,11 +215,13 @@ Das löscht die Daten der App – vorher exportieren, danach „Backup wiederher
 ## Lokal testen
 
 ```bash
-python3 -m http.server 8765
+python3 -m http.server 8765 --bind 127.0.0.1
 ```
 
-Dann `http://localhost:8765` im Browser öffnen. Achtung: Der Service Worker liefert danach die
-zwischengespeicherte Version aus – nach Änderungen die Versionsnummer in `sw.js` erhöhen.
+Dann `http://localhost:8765` im Browser öffnen. `--bind 127.0.0.1` ist wichtig: Ohne diesen Zusatz ist der
+Test-Server im ganzen WLAN erreichbar und liefert den kompletten Projektordner aus (auch `server/` und `.git`).
+Achtung: Der Service Worker liefert danach die zwischengespeicherte Version aus – nach Änderungen die
+Versionsnummer in `sw.js` erhöhen.
 
 ## Hinweise für die Weiterarbeit in einem neuen Chat
 
